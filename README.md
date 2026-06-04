@@ -1,6 +1,6 @@
 # DCS RadioForge
 
-![Smoke Test](https://img.shields.io/badge/smoke--test-ready-brightgreen)
+[![Smoke Test](https://github.com/Mewt0/dcs-radioforge/actions/workflows/smoke.yml/badge.svg)](https://github.com/Mewt0/dcs-radioforge/actions/workflows/smoke.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![DCS](https://img.shields.io/badge/DCS-Mission%20Editor-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
