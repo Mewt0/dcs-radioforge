@@ -1,0 +1,22 @@
+[project]
+name = "dcs-radioforge"
+version = "0.1.0"
+description = "Local SRS-like radio voiceover generator for DCS World missions."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "DCS RadioForge contributors" }
+]
+dependencies = [
+  "edge-tts==7.2.8",
+  "imageio-ffmpeg==0.6.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/OWNER/dcs-radioforge"
+Issues = "https://github.com/OWNER/dcs-radioforge/issues"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"

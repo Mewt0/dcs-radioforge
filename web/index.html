@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DCS RadioForge</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">DVS</div>
+          <div>
+            <h1 data-i18n="app_title">DCS RadioForge</h1>
+            <p data-i18n="app_subtitle">Генератор радио-озвучки для миссий DCS</p>
+          </div>
+        </div>
+        <div class="status-strip">
+          <div class="segmented lang-switch" id="uiLanguage">
+            <button data-ui-lang="ru" class="active">RU</button>
+            <button data-ui-lang="en">EN</button>
+          </div>
+          <span id="apiStatus" class="status-dot" data-i18n="status_ready">Студия готова</span>
+          <button id="refreshLibrary" class="icon-button" title="Refresh generated files">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 11V5m0 6h-6"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <aside class="rail">
+          <div class="rail-head">
+            <h2 data-i18n="script_lines">Реплики</h2>
+            <div class="button-row">
+              <button id="addLine" class="icon-button" data-i18n-title="add_line" title="Добавить реплику">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <button id="loadSamples" class="icon-button" data-i18n-title="load_samples" title="Загрузить примеры">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h16"/></svg>
+              </button>
+            </div>
+          </div>
+          <div id="lineList" class="line-list"></div>
+        </aside>
+
+        <section class="editor">
+          <div class="panel editor-panel">
+            <div class="panel-title">
+              <h2 data-i18n="line_editor">Редактор реплики</h2>
+              <div class="segmented" id="languageControl">
+                <button data-lang="ru" class="active">RU</button>
+                <button data-lang="en">EN</button>
+              </div>
+            </div>
+
+            <div class="grid two">
+              <label>
+                <span data-i18n="callsign">Позывной</span>
+                <input id="speakerInput" type="text" spellcheck="false" />
+              </label>
+              <label>
+                <span data-i18n="file_id">Имя файла</span>
+                <input id="idInput" type="text" spellcheck="false" />
+              </label>
+            </div>
+
+            <label class="textarea-label">
+              <span data-i18n="phrase">Текст реплики</span>
+              <textarea id="textInput" rows="8" spellcheck="true"></textarea>
+            </label>
+
+            <div class="grid three">
+              <label>
+                <span data-i18n="voice">Голос</span>
+                <select id="voiceSelect"></select>
+              </label>
+              <label>
+                <span data-i18n="rate">Скорость</span>
+                <input id="rateInput" type="text" value="+0%" />
+              </label>
+              <label>
+                <span data-i18n="pitch">Тон</span>
+                <input id="pitchInput" type="text" value="+0Hz" />
+              </label>
+            </div>
+
+            <div class="actions">
+              <button id="generateSelected" class="primary">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg>
+                <span data-i18n="generate_selected">Сгенерировать выбранную</span>
+              </button>
+              <button id="generateAll" class="secondary">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <span data-i18n="generate_all">Сгенерировать все</span>
+              </button>
+              <button id="duplicateLine" class="secondary compact-button" data-i18n-title="duplicate_line" title="Дублировать">
+                <span data-i18n="copy_line">Копия</span>
+              </button>
+              <button id="deleteLine" class="danger compact-button" data-i18n-title="delete_line" title="Удалить">
+                <span data-i18n="delete_short">Удалить</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="panel results-panel">
+            <div class="panel-title">
+              <h2 data-i18n="generated_files">Готовые файлы</h2>
+              <span id="resultCount" class="subtle">0 файлов</span>
+            </div>
+            <div id="resultList" class="result-list"></div>
+          </div>
+        </section>
+
+        <aside class="inspector">
+          <div class="panel">
+            <h2 data-i18n="voice_roles">Роли голоса</h2>
+            <div id="roleGrid" class="role-grid"></div>
+          </div>
+
+          <div class="panel">
+            <h2 data-i18n="radio_effect">Эффект радио</h2>
+            <div class="format-row">
+              <label><input id="fmtOgg" type="checkbox" checked /> OGG</label>
+              <label><input id="fmtWav" type="checkbox" checked /> WAV</label>
+              <label><input id="micClicks" type="checkbox" checked /> <span data-i18n="mic_clicks">Mic clicks</span></label>
+              <label class="sample-rate"><span data-i18n="hz">Гц</span> <input id="sampleRate" type="number" min="8000" max="48000" step="1000" value="22050" /></label>
+            </div>
+            <label class="quality-control">
+              <span><span data-i18n="signal_quality">Качество сигнала</span> <strong id="qualityValue">86%</strong></span>
+              <input id="signalQuality" type="range" min="15" max="100" value="86" />
+            </label>
+            <div id="presetGrid" class="preset-grid"></div>
+          </div>
+
+          <div class="panel tips">
+            <h2 data-i18n="dcs_workflow">Как вставлять в DCS</h2>
+            <p data-i18n="dcs_tip_1">Для миссий лучше использовать OGG: файл меньше, качество нормальное. В редакторе DCS добавь SOUND TO ALL или SOUND TO GROUP и выбери файл из <span>build\dcs-ready</span>.</p>
+            <p data-i18n="dcs_tip_2">Для субтитров добавь MESSAGE TO ALL/GROUP тем же триггером.</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
