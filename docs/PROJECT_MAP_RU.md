@@ -14,7 +14,12 @@ dcs-radioforge/
 ├─ setup.ps1           # Создание .venv и установка зависимостей
 ├─ start_gui.ps1       # Запуск локальной студии
 ├─ generate.ps1        # Запуск CSV-генерации
+├─ run.py              # Ленивый Python-запуск
+├─ Start_RadioForge.bat # Двойной клик для Windows
+├─ build_windows_exe.ps1 # Сборка Windows portable EXE
+├─ radioforge_launcher.py # Точка входа для PyInstaller
 ├─ requirements.txt    # Зависимости
+├─ requirements-build.txt # Зависимости для сборки EXE
 ├─ README.md           # Главная страница на английском
 ├─ README_RU.md        # Главная страница на русском
 ├─ CHANGELOG.md        # История релизов
@@ -40,4 +45,6 @@ dcs-radioforge/
 - `web/app.js` - состояние интерфейса, русский/английский текст, отправка генерации.
 - `web/styles.css` - визуальный стиль.
 - `voicekit.py` - CSV-режим для пакетной генерации.
+- `run.py` - ленивый запуск из исходников.
+- `radioforge_launcher.py` - входная точка для one-file EXE.
 - `build/` - временный вывод, его не надо пушить на GitHub.

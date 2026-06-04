@@ -2,6 +2,17 @@
 
 All notable changes to DCS RadioForge are documented here.
 
+## 0.1.1 - 2026-06-04
+
+### Added
+
+- Lazy Windows launcher: `Start_RadioForge.bat`.
+- Lazy Python launcher: `python run.py --open`.
+- PyInstaller entry point for a one-file Windows executable.
+- Local build script: `build_windows_exe.ps1`.
+- GitHub Actions workflow for Windows EXE artifacts.
+- Frozen-app path handling so generated DCS audio is written beside the EXE instead of inside a temporary bundle.
+
 ## 0.1.0 - 2026-06-04
 
 ### Added

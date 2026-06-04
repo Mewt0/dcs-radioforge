@@ -7,8 +7,10 @@ import json
 import mimetypes
 import shutil
 import subprocess
+import sys
 import time
 import wave
+import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -17,9 +19,12 @@ import edge_tts
 import imageio_ffmpeg
 
 
-ROOT = Path(__file__).resolve().parent
-WEB = ROOT / "web"
-BUILD = ROOT / "build"
+SOURCE_ROOT = Path(__file__).resolve().parent
+RESOURCE_ROOT = Path(getattr(sys, "_MEIPASS", SOURCE_ROOT))
+APP_ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else SOURCE_ROOT
+ROOT = APP_ROOT
+WEB = RESOURCE_ROOT / "web"
+BUILD = APP_ROOT / "build"
 READY = BUILD / "dcs-ready"
 TMP = BUILD / "_tmp_mp3"
 
@@ -493,19 +498,25 @@ class Handler(BaseHTTPRequestHandler):
         print(f"{self.address_string()} - {fmt % args}")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    args = parser.parse_args()
+    parser.add_argument("--open", action="store_true", help="Open the browser after starting the local studio.")
+    args = parser.parse_args(argv)
 
-    WEB.mkdir(parents=True, exist_ok=True)
+    if not WEB.exists():
+        raise RuntimeError(f"web assets were not found: {WEB}")
     READY.mkdir(parents=True, exist_ok=True)
     if not shutil.which(ffmpeg()) and not Path(ffmpeg()).exists():
         raise RuntimeError("ffmpeg binary was not found")
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"DCS RadioForge: http://{args.host}:{args.port}")
+    url = f"http://{args.host}:{args.port}"
+    print(f"DCS RadioForge: {url}")
+    print(f"DCS-ready output: {READY}")
+    if args.open:
+        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

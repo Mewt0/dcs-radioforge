@@ -6,4 +6,4 @@ if (-not (Test-Path -LiteralPath $Python)) {
     & (Join-Path $Root "setup.ps1")
 }
 
-& $Python (Join-Path $Root "server.py") --host 127.0.0.1 --port 8765
+& $Python (Join-Path $Root "server.py") --host 127.0.0.1 --port 8765 --open

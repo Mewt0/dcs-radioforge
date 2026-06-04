@@ -14,7 +14,12 @@ dcs-radioforge/
 ├─ setup.ps1           # Creates local virtual environment and installs deps
 ├─ start_gui.ps1       # Starts the local web studio
 ├─ generate.ps1        # Runs CSV batch generation
+├─ run.py              # Lazy Python launcher
+├─ Start_RadioForge.bat # Double-click Windows launcher
+├─ build_windows_exe.ps1 # Builds the Windows portable EXE
+├─ radioforge_launcher.py # PyInstaller entry point
 ├─ requirements.txt    # Runtime dependencies
+├─ requirements-build.txt # EXE build dependencies
 ├─ README.md           # English GitHub front page
 ├─ README_RU.md        # Russian GitHub front page
 ├─ CHANGELOG.md        # Release history
@@ -39,4 +44,6 @@ UI line editor
 - `server.py` owns the GUI API and SRS-like radio pack.
 - `web/app.js` owns browser state, localization, role presets, and generation requests.
 - `voicekit.py` is the simpler CSV workflow for batch generation.
+- `run.py` owns the lazy source launch flow.
+- `radioforge_launcher.py` owns the one-file EXE entry point.
 - `build/` is disposable generated output and should not be committed.

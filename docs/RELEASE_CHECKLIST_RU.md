@@ -37,8 +37,9 @@ http://127.0.0.1:8765/?lang=en
 
 ## GitHub Release
 
-- [ ] Tag: `v0.1.0`
-- [ ] Title: `DCS RadioForge 0.1.0`
+- [ ] Tag: `v0.1.1`
+- [ ] Title: `DCS RadioForge 0.1.1`
 - [ ] Attach clean source archive.
+- [ ] Attach Windows portable EXE archive.
 - [ ] Optional: attach a small demo audio pack.
 - [ ] Mention that voice generation requires internet access.

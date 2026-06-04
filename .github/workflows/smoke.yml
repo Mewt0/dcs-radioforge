@@ -21,7 +21,7 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Compile Python sources
-        run: python -m py_compile server.py voicekit.py
+        run: python -m py_compile server.py voicekit.py run.py radioforge_launcher.py
 
       - name: Validate web assets exist
         shell: pwsh

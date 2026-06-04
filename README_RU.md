@@ -17,7 +17,38 @@ English documentation: [README.md](README.md)
 - Экспорт DCS-ready файлов в `build/dcs-ready`.
 - Не нужен платный API-ключ. Используются `edge-tts` и ffmpeg из `imageio-ffmpeg`.
 
-## Быстрый старт
+## Что скачать
+
+Самый простой вариант для Windows:
+
+1. Скачай `DCS-RadioForge-v0.1.1-windows-portable.zip` из последнего релиза.
+2. Распакуй куда удобно.
+3. Запусти `DCS-RadioForge.exe`.
+4. Браузер откроется сам.
+
+Готовые файлы для DCS появятся рядом с exe:
+
+```text
+build/dcs-ready
+```
+
+Windows может показать SmartScreen-предупреждение, потому что exe не подписан сертификатом.
+
+## Быстрый старт из исходников
+
+Ленивый запуск через Python:
+
+```powershell
+python run.py --open
+```
+
+Или двойной клик на Windows:
+
+```text
+Start_RadioForge.bat
+```
+
+Классический PowerShell-вариант:
 
 ```powershell
 .\setup.ps1
@@ -68,6 +99,20 @@ http://127.0.0.1:8765/?lang=en
 
 ```powershell
 .\generate.ps1
+```
+
+## Сборка Windows EXE
+
+Собрать portable exe локально:
+
+```powershell
+.\build_windows_exe.ps1
+```
+
+Результат:
+
+```text
+release/DCS-RadioForge-v0.1.1-windows-portable.zip
 ```
 
 ## Карта проекта

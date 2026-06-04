@@ -9,4 +9,4 @@ if (-not (Test-Path -LiteralPath $Venv)) {
 & (Join-Path $Venv "Scripts\python.exe") -m pip install --upgrade pip
 & (Join-Path $Venv "Scripts\python.exe") -m pip install -r (Join-Path $Root "requirements.txt")
 
-Write-Host "Ready. Run: .\generate.ps1"
+Write-Host "Ready. Run: .\start_gui.ps1"

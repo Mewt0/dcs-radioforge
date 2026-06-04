@@ -22,7 +22,38 @@ The current audio pack is **SRS-like**: it does not use SRS code and is not an S
 - DCS-ready `.ogg` and `.wav` export into `build/dcs-ready`.
 - No paid API key required. Uses `edge-tts` and the ffmpeg binary bundled with `imageio-ffmpeg`.
 
-## Quick Start
+## Download Options
+
+For most Windows users, use the release package:
+
+1. Download `DCS-RadioForge-v0.1.1-windows-portable.zip` from the latest release.
+2. Unzip it anywhere.
+3. Run `DCS-RadioForge.exe`.
+4. The browser opens automatically.
+
+Generated mission audio appears next to the EXE:
+
+```text
+build/dcs-ready
+```
+
+Windows may show a SmartScreen warning because the EXE is unsigned.
+
+## Quick Start From Source
+
+Lazy Python launcher:
+
+```powershell
+python run.py --open
+```
+
+Or double-click on Windows:
+
+```text
+Start_RadioForge.bat
+```
+
+Classic PowerShell setup:
 
 ```powershell
 .\setup.ps1
@@ -73,6 +104,20 @@ The GUI is the main workflow. Batch generation is also available through `lines.
 
 ```powershell
 .\generate.ps1
+```
+
+## Build Windows EXE
+
+To build the portable EXE locally:
+
+```powershell
+.\build_windows_exe.ps1
+```
+
+The output is written to:
+
+```text
+release/DCS-RadioForge-v0.1.1-windows-portable.zip
 ```
 
 ## Project Map

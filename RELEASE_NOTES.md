@@ -1,27 +1,24 @@
-# DCS RadioForge 0.1.0
+# DCS RadioForge 0.1.1
 
-First public release of DCS RadioForge: a local tool for building DCS World mission voiceovers with SRS-like radio processing.
+This release adds the "lazy user" launch path and a ready-to-use Windows portable EXE package.
 
 ## Highlights
 
-- Russian and English UI.
-- Russian and English tactical voices through Edge TTS.
-- DCS-ready `.ogg` and `.wav` export.
-- SRS-like presets for VHF, UHF, FM, cockpit, AWACS, bad reception, and old Soviet radio.
-- Signal quality slider, mic clicks, and transmission tails.
-- Batch CSV mode for mission creators who prefer spreadsheet-style line lists.
+- Download-and-run Windows portable package with `DCS-RadioForge.exe`.
+- Lazy Python launcher: `python run.py --open`.
+- Double-click launcher for source installs: `Start_RadioForge.bat`.
+- Local EXE build script: `build_windows_exe.ps1`.
+- GitHub Actions workflow for future Windows EXE builds.
+- EXE-safe output handling: generated files are written beside the executable into `build/dcs-ready`.
 
-## Recommended Release Assets
+## Release Assets
 
-Attach these files to a GitHub release:
+- `DCS-RadioForge-v0.1.1-windows-portable.zip` - recommended for Windows users who do not want to set up Python.
+- `dcs-radioforge-v0.1.1-source.zip` - source package with Python launchers.
+- `dcs-radioforge-v0.1.1-demo-audio.zip` - optional generated audio examples.
 
-- `dcs-radioforge-v0.1.0-source.zip` - clean source package.
-- Optional example audio pack generated locally, if you want to demonstrate the sound.
+## Notes
 
-Do not upload `build/` as repository source. Generated files should stay as release/demo artifacts only.
-
-## Known Notes
-
-- Voice synthesis requires internet access because `edge-tts` talks to Microsoft Edge online voices.
+- Voice synthesis still requires internet access because `edge-tts` uses online Microsoft Edge voices.
+- Windows may show a SmartScreen warning because the EXE is unsigned.
 - DCS RadioForge is independent from DCS-SimpleRadio Standalone and does not include SRS code.
-- OGG is recommended for missions because it keeps `.miz` size smaller.
