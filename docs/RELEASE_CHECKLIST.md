@@ -37,8 +37,8 @@ Generate at least one OGG with:
 
 ## GitHub Release
 
-- [ ] Tag: `v0.1.2`
-- [ ] Title: `DCS RadioForge 0.1.2`
+- [ ] Tag: `v0.1.3`
+- [ ] Title: `DCS RadioForge 0.1.3`
 - [ ] Attach clean source archive.
 - [ ] Attach Windows portable EXE archive.
 - [ ] Confirm `.env` is ignored and no API key is committed.

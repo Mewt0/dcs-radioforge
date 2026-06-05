@@ -2,6 +2,17 @@
 
 All notable changes to DCS RadioForge are documented here.
 
+## 0.1.3 - 2026-06-05
+
+### Fixed
+
+- Updated ElevenLabs voice loading to the current `GET /v2/voices` endpoint.
+- Added pagination support for ElevenLabs voice lists so larger voice libraries load reliably.
+
+### Verified
+
+- Confirmed Text to Speech, Voice Design, and Create Voice endpoints against the official ElevenLabs API reference.
+
 ## 0.1.2 - 2026-06-05
 
 ### Added

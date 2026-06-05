@@ -26,7 +26,7 @@ The current audio pack is **SRS-like**: it does not use SRS code and is not an S
 
 For most Windows users, use the release package:
 
-1. Download `DCS-RadioForge-v0.1.2-windows-portable.zip` from the latest release.
+1. Download `DCS-RadioForge-v0.1.3-windows-portable.zip` from the latest release.
 2. Unzip it anywhere.
 3. Run `DCS-RadioForge.exe`.
 4. The browser opens automatically.
@@ -133,7 +133,7 @@ To build the portable EXE locally:
 The output is written to:
 
 ```text
-release/DCS-RadioForge-v0.1.2-windows-portable.zip
+release/DCS-RadioForge-v0.1.3-windows-portable.zip
 ```
 
 ## Project Map

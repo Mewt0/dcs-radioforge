@@ -21,7 +21,7 @@ English documentation: [README.md](README.md)
 
 Самый простой вариант для Windows:
 
-1. Скачай `DCS-RadioForge-v0.1.2-windows-portable.zip` из последнего релиза.
+1. Скачай `DCS-RadioForge-v0.1.3-windows-portable.zip` из последнего релиза.
 2. Распакуй куда удобно.
 3. Запусти `DCS-RadioForge.exe`.
 4. Браузер откроется сам.
@@ -128,7 +128,7 @@ http://127.0.0.1:8765/?lang=en
 Результат:
 
 ```text
-release/DCS-RadioForge-v0.1.2-windows-portable.zip
+release/DCS-RadioForge-v0.1.3-windows-portable.zip
 ```
 
 ## Карта проекта

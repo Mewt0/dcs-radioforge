@@ -32,7 +32,8 @@ BUILD = APP_ROOT / "build"
 READY = BUILD / "dcs-ready"
 TMP = BUILD / "_tmp_mp3"
 PREVIEWS = BUILD / "elevenlabs-previews"
-ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1"
+ELEVENLABS_HOST = "https://api.elevenlabs.io"
+ELEVENLABS_V1 = f"{ELEVENLABS_HOST}/v1"
 
 VOICE_CATALOG = [
     {"name": "ru-RU-DmitryNeural", "lang": "ru", "gender": "Male", "role": "Russian controller", "tone": "Friendly, Positive"},
@@ -262,7 +263,7 @@ def elevenlabs_request(
     binary: bool = False,
 ) -> bytes | dict:
     key = elevenlabs_api_key(required=True)
-    url = f"{ELEVENLABS_BASE_URL}{path}"
+    url = f"{ELEVENLABS_HOST}{path}" if path.startswith("/v") else f"{ELEVENLABS_V1}{path}"
     if query:
         url = f"{url}?{parse.urlencode(query)}"
     body = json.dumps(payload or {}, ensure_ascii=False).encode("utf-8") if payload is not None else None
@@ -320,8 +321,21 @@ def synthesize_elevenlabs_mp3(
 
 
 def list_elevenlabs_voices() -> list[dict]:
-    data = elevenlabs_request("GET", "/voices")
-    voices = data.get("voices", []) if isinstance(data, dict) else []
+    voices: list[dict] = []
+    next_page_token: str | None = None
+    while True:
+        query = {"page_size": 100}
+        if next_page_token:
+            query["next_page_token"] = next_page_token
+        data = elevenlabs_request("GET", "/v2/voices", query=query)
+        if not isinstance(data, dict):
+            break
+        voices.extend(data.get("voices", []))
+        if not data.get("has_more"):
+            break
+        next_page_token = data.get("next_page_token")
+        if not next_page_token:
+            break
     return [
         {
             "voice_id": voice.get("voice_id", ""),

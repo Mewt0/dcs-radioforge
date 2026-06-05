@@ -6,7 +6,7 @@ $BuildPython = Join-Path $BuildVenv "Scripts\python.exe"
 $ReleaseDir = Join-Path $Root "release"
 $PyInstallerWork = Join-Path $Root "build\pyinstaller"
 $ExePath = Join-Path $ReleaseDir "DCS-RadioForge.exe"
-$PortableZip = Join-Path $ReleaseDir "DCS-RadioForge-v0.1.2-windows-portable.zip"
+$PortableZip = Join-Path $ReleaseDir "DCS-RadioForge-v0.1.3-windows-portable.zip"
 $WebData = "$(Join-Path $Root "web");web"
 
 function Remove-ProjectPath {
@@ -61,7 +61,7 @@ if (-not (Test-Path -LiteralPath $ExePath)) {
 
 Remove-ProjectPath -PathToRemove $PortableZip
 
-$PortableRoot = Join-Path $ReleaseDir "DCS-RadioForge-v0.1.2-windows-portable"
+$PortableRoot = Join-Path $ReleaseDir "DCS-RadioForge-v0.1.3-windows-portable"
 Remove-ProjectPath -PathToRemove $PortableRoot -Recurse
 New-Item -ItemType Directory -Force -Path $PortableRoot | Out-Null
 

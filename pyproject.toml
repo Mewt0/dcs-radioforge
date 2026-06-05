@@ -1,6 +1,6 @@
 [project]
 name = "dcs-radioforge"
-version = "0.1.2"
+version = "0.1.3"
 description = "Local SRS-like radio voiceover generator for DCS World missions."
 readme = "README.md"
 requires-python = ">=3.10"
