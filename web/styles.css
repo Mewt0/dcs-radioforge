@@ -238,6 +238,7 @@ h2 {
 
 .grid.two { grid-template-columns: 1fr 1fr; }
 .grid.three { grid-template-columns: 1.6fr 0.7fr 0.7fr; }
+.grid.one { grid-template-columns: 1fr; }
 
 label {
   display: grid;
@@ -388,6 +389,56 @@ input:focus, textarea:focus, select:focus {
 .role-grid, .preset-grid {
   display: grid;
   gap: 8px;
+}
+
+.voice-lab {
+  display: grid;
+  gap: 12px;
+}
+
+.voice-lab .grid {
+  padding: 0;
+}
+
+.voice-lab .textarea-label {
+  padding: 0;
+}
+
+.compact-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 0;
+}
+
+.voice-preview-list {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.voice-preview {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255,255,255,0.035);
+}
+
+.voice-preview strong,
+.voice-preview small {
+  display: block;
+}
+
+.voice-preview small {
+  margin-top: 3px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.voice-preview audio {
+  width: 100%;
+  height: 34px;
 }
 
 .preset-grid {

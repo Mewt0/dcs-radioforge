@@ -6,7 +6,7 @@ $BuildPython = Join-Path $BuildVenv "Scripts\python.exe"
 $ReleaseDir = Join-Path $Root "release"
 $PyInstallerWork = Join-Path $Root "build\pyinstaller"
 $ExePath = Join-Path $ReleaseDir "DCS-RadioForge.exe"
-$PortableZip = Join-Path $ReleaseDir "DCS-RadioForge-v0.1.1-windows-portable.zip"
+$PortableZip = Join-Path $ReleaseDir "DCS-RadioForge-v0.1.2-windows-portable.zip"
 $WebData = "$(Join-Path $Root "web");web"
 
 function Remove-ProjectPath {
@@ -61,7 +61,7 @@ if (-not (Test-Path -LiteralPath $ExePath)) {
 
 Remove-ProjectPath -PathToRemove $PortableZip
 
-$PortableRoot = Join-Path $ReleaseDir "DCS-RadioForge-v0.1.1-windows-portable"
+$PortableRoot = Join-Path $ReleaseDir "DCS-RadioForge-v0.1.2-windows-portable"
 Remove-ProjectPath -PathToRemove $PortableRoot -Recurse
 New-Item -ItemType Directory -Force -Path $PortableRoot | Out-Null
 
@@ -69,6 +69,8 @@ Copy-Item -LiteralPath $ExePath -Destination (Join-Path $PortableRoot "DCS-Radio
 Copy-Item -LiteralPath (Join-Path $Root "README.md") -Destination (Join-Path $PortableRoot "README.md")
 Copy-Item -LiteralPath (Join-Path $Root "README_RU.md") -Destination (Join-Path $PortableRoot "README_RU.md")
 Copy-Item -LiteralPath (Join-Path $Root "LICENSE") -Destination (Join-Path $PortableRoot "LICENSE")
+Copy-Item -LiteralPath (Join-Path $Root ".env.example") -Destination (Join-Path $PortableRoot ".env.example")
+Copy-Item -LiteralPath (Join-Path $Root "Set_ElevenLabs_Key.bat") -Destination (Join-Path $PortableRoot "Set_ElevenLabs_Key.bat")
 
 Compress-Archive -Path $PortableRoot -DestinationPath $PortableZip
 

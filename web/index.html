@@ -72,8 +72,30 @@
 
             <div class="grid three">
               <label>
+                <span data-i18n="provider">Provider</span>
+                <select id="providerSelect">
+                  <option value="edge">Edge TTS</option>
+                  <option value="elevenlabs">ElevenLabs</option>
+                </select>
+              </label>
+              <label>
                 <span data-i18n="voice">Голос</span>
                 <select id="voiceSelect"></select>
+              </label>
+              <label>
+                <span data-i18n="eleven_voice">ElevenLabs voice</span>
+                <select id="elevenVoiceSelect"></select>
+              </label>
+            </div>
+
+            <div class="grid three">
+              <label>
+                <span data-i18n="eleven_model">ElevenLabs model</span>
+                <select id="elevenModelSelect">
+                  <option value="eleven_multilingual_v2">Multilingual v2</option>
+                  <option value="eleven_turbo_v2_5">Turbo v2.5</option>
+                  <option value="eleven_flash_v2_5">Flash v2.5</option>
+                </select>
               </label>
               <label>
                 <span data-i18n="rate">Скорость</span>
@@ -113,6 +135,36 @@
         </section>
 
         <aside class="inspector">
+          <div class="panel voice-lab">
+            <div class="panel-title">
+              <h2 data-i18n="voice_lab">Voice Lab</h2>
+              <span id="elevenStatus" class="subtle">ElevenLabs</span>
+            </div>
+            <div class="grid one">
+              <label>
+                <span data-i18n="voice_name">Voice name</span>
+                <input id="voiceNameInput" type="text" value="DARKSTAR Custom" spellcheck="false" />
+              </label>
+              <label class="textarea-label">
+                <span data-i18n="voice_description">Voice description</span>
+                <textarea id="voicePromptInput" rows="5" spellcheck="true"></textarea>
+              </label>
+              <label class="textarea-label">
+                <span data-i18n="preview_text">Preview text</span>
+                <textarea id="voicePreviewText" rows="4" spellcheck="true"></textarea>
+              </label>
+            </div>
+            <div class="actions compact-actions">
+              <button id="refreshElevenVoices" class="secondary">
+                <span data-i18n="refresh_voices">Refresh voices</span>
+              </button>
+              <button id="designVoice" class="primary">
+                <span data-i18n="design_voice">Generate previews</span>
+              </button>
+            </div>
+            <div id="voicePreviewList" class="voice-preview-list"></div>
+          </div>
+
           <div class="panel">
             <h2 data-i18n="voice_roles">Роли голоса</h2>
             <div id="roleGrid" class="role-grid"></div>

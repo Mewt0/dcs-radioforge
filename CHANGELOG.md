@@ -2,6 +2,21 @@
 
 All notable changes to DCS RadioForge are documented here.
 
+## 0.1.2 - 2026-06-05
+
+### Added
+
+- Optional ElevenLabs provider for higher-quality RU/EN mission voiceovers.
+- Voice Lab UI for generating synthetic voice previews from descriptions.
+- Save selected Voice Design previews into the user's ElevenLabs voices.
+- ElevenLabs voice list loading in the local studio.
+- Safe local API key setup through `.env` or `Set_ElevenLabs_Key.bat`.
+
+### Security
+
+- API keys are read from local environment only and are ignored by git.
+- `.env.example` documents the expected key name without storing secrets.
+
 ## 0.1.1 - 2026-06-04
 
 ### Added

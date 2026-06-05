@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import csv
 import json
 import mimetypes
+import os
 import shutil
 import subprocess
 import sys
@@ -13,6 +15,8 @@ import wave
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib import error as urlerror
+from urllib import parse, request
 from urllib.parse import unquote, urlparse
 
 import edge_tts
@@ -27,6 +31,8 @@ WEB = RESOURCE_ROOT / "web"
 BUILD = APP_ROOT / "build"
 READY = BUILD / "dcs-ready"
 TMP = BUILD / "_tmp_mp3"
+PREVIEWS = BUILD / "elevenlabs-previews"
+ELEVENLABS_BASE_URL = "https://api.elevenlabs.io/v1"
 
 VOICE_CATALOG = [
     {"name": "ru-RU-DmitryNeural", "lang": "ru", "gender": "Male", "role": "Russian controller", "tone": "Friendly, Positive"},
@@ -226,9 +232,173 @@ def text_response(handler: BaseHTTPRequestHandler, text: str, status: int = 200)
     handler.wfile.write(raw)
 
 
+def load_local_env() -> None:
+    for env_path in (APP_ROOT / ".env", SOURCE_ROOT / ".env"):
+        if not env_path.exists():
+            continue
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+def elevenlabs_api_key(required: bool = True) -> str | None:
+    key = (os.environ.get("ELEVENLABS_API_KEY") or "").strip()
+    if required and not key:
+        raise RuntimeError("ELEVENLABS_API_KEY is not configured. Add it to .env or the environment.")
+    return key or None
+
+
+def elevenlabs_request(
+    method: str,
+    path: str,
+    payload: dict | None = None,
+    query: dict | None = None,
+    binary: bool = False,
+) -> bytes | dict:
+    key = elevenlabs_api_key(required=True)
+    url = f"{ELEVENLABS_BASE_URL}{path}"
+    if query:
+        url = f"{url}?{parse.urlencode(query)}"
+    body = json.dumps(payload or {}, ensure_ascii=False).encode("utf-8") if payload is not None else None
+    headers = {"xi-api-key": key or "", "User-Agent": "DCS-RadioForge"}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+    req = request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with request.urlopen(req, timeout=120) as response:
+            raw = response.read()
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"ElevenLabs API error {exc.code}: {detail}") from exc
+    if binary:
+        return raw
+    if not raw:
+        return {}
+    return json.loads(raw.decode("utf-8"))
+
+
 async def synthesize_mp3(text: str, voice: str, rate: str, pitch: str, volume: str, target: Path) -> None:
     communicate = edge_tts.Communicate(text, voice=voice, rate=rate, pitch=pitch, volume=volume)
     await communicate.save(str(target))
+
+
+def synthesize_elevenlabs_mp3(
+    text: str,
+    voice_id: str,
+    model_id: str,
+    language_code: str,
+    target: Path,
+) -> None:
+    if not voice_id:
+        raise RuntimeError("ElevenLabs voice id is empty")
+    payload: dict = {
+        "text": text,
+        "model_id": model_id or "eleven_multilingual_v2",
+        "voice_settings": {
+            "stability": 0.48,
+            "similarity_boost": 0.78,
+            "style": 0.18,
+            "use_speaker_boost": True,
+        },
+    }
+    if language_code:
+        payload["language_code"] = language_code
+    raw = elevenlabs_request(
+        "POST",
+        f"/text-to-speech/{parse.quote(voice_id)}",
+        payload=payload,
+        query={"output_format": "mp3_44100_128"},
+        binary=True,
+    )
+    target.write_bytes(raw)  # type: ignore[arg-type]
+
+
+def list_elevenlabs_voices() -> list[dict]:
+    data = elevenlabs_request("GET", "/voices")
+    voices = data.get("voices", []) if isinstance(data, dict) else []
+    return [
+        {
+            "voice_id": voice.get("voice_id", ""),
+            "name": voice.get("name", ""),
+            "category": voice.get("category", ""),
+            "description": voice.get("description") or "",
+            "preview_url": voice.get("preview_url") or "",
+            "labels": voice.get("labels") or {},
+        }
+        for voice in voices
+    ]
+
+
+def design_elevenlabs_voice(payload: dict) -> dict:
+    PREVIEWS.mkdir(parents=True, exist_ok=True)
+    description = (payload.get("voice_description") or payload.get("description") or "").strip()
+    if len(description) < 20:
+        raise RuntimeError("Voice description must be at least 20 characters")
+    request_payload: dict = {
+        "voice_description": description,
+        "model_id": payload.get("model_id") or "eleven_multilingual_ttv_v2",
+        "auto_generate_text": bool(payload.get("auto_generate_text", True)),
+        "should_enhance": bool(payload.get("should_enhance", True)),
+        "guidance_scale": float(payload.get("guidance_scale") or 7),
+        "loudness": float(payload.get("loudness") or 0.5),
+    }
+    text = (payload.get("text") or "").strip()
+    if len(text) >= 100:
+        request_payload["text"] = text
+    else:
+        request_payload["auto_generate_text"] = True
+    seed = payload.get("seed")
+    if seed not in (None, ""):
+        request_payload["seed"] = int(seed)
+    data = elevenlabs_request(
+        "POST",
+        "/text-to-voice/design",
+        payload=request_payload,
+        query={"output_format": "mp3_44100_128"},
+    )
+    previews = []
+    for index, preview in enumerate(data.get("previews", []), start=1):  # type: ignore[union-attr]
+        generated_id = preview.get("generated_voice_id") or f"preview_{index}"
+        audio_base64 = preview.get("audio_base_64") or ""
+        filename = safe_id(f"eleven_preview_{generated_id}", f"eleven_preview_{index}") + ".mp3"
+        if audio_base64:
+            (PREVIEWS / filename).write_bytes(base64.b64decode(audio_base64))
+        previews.append(
+            {
+                "generated_voice_id": generated_id,
+                "duration_secs": preview.get("duration_secs"),
+                "language": preview.get("language"),
+                "media_type": preview.get("media_type") or "audio/mpeg",
+                "url": f"/previews/{filename}" if audio_base64 else "",
+            }
+        )
+    return {"text": data.get("text", ""), "previews": previews}  # type: ignore[union-attr]
+
+
+def create_elevenlabs_voice(payload: dict) -> dict:
+    voice_name = (payload.get("voice_name") or payload.get("name") or "").strip()
+    voice_description = (payload.get("voice_description") or payload.get("description") or "").strip()
+    generated_voice_id = (payload.get("generated_voice_id") or "").strip()
+    if not voice_name:
+        raise RuntimeError("Voice name is empty")
+    if len(voice_description) < 20:
+        raise RuntimeError("Voice description must be at least 20 characters")
+    if not generated_voice_id:
+        raise RuntimeError("Generated voice id is empty")
+    request_payload = {
+        "voice_name": voice_name,
+        "voice_description": voice_description,
+        "generated_voice_id": generated_voice_id,
+        "labels": payload.get("labels") or {"use_case": "dcs-radioforge"},
+    }
+    result = elevenlabs_request("POST", "/text-to-voice", payload=request_payload)
+    return result if isinstance(result, dict) else {}
 
 
 def run_ffmpeg(args: list[str]) -> None:
@@ -357,7 +527,11 @@ def generate_items(items: list[dict]) -> list[dict]:
             continue
         line_id = safe_id(item.get("id") or f"line_{index:03d}", f"line_{index:03d}")
         speaker = (item.get("speaker") or "").strip()
+        provider = item.get("provider") or "edge"
         voice = item.get("voice") or "ru-RU-DmitryNeural"
+        eleven_voice_id = item.get("elevenVoiceId") or ""
+        eleven_model = item.get("elevenModel") or "eleven_multilingual_v2"
+        eleven_language = item.get("elevenLanguage") or item.get("lang") or ""
         rate = item.get("rate") or "+0%"
         pitch = item.get("pitch") or "+0Hz"
         volume = item.get("volume") or "+0%"
@@ -373,13 +547,18 @@ def generate_items(items: list[dict]) -> list[dict]:
             basename = f"{basename}_{now}"
 
         mp3 = TMP / f"{basename}.mp3"
-        asyncio.run(synthesize_mp3(text, voice, rate, pitch, volume, mp3))
+        if provider == "elevenlabs":
+            synthesize_elevenlabs_mp3(text, eleven_voice_id, eleven_model, eleven_language, mp3)
+            voice_label = eleven_voice_id
+        else:
+            asyncio.run(synthesize_mp3(text, voice, rate, pitch, volume, mp3))
+            voice_label = voice
 
         row = {
             "time": now,
             "id": line_id,
             "speaker": speaker,
-            "voice": voice,
+            "voice": voice_label,
             "preset": preset,
             "signal_quality": signal_quality,
             "mic_clicks": mic_clicks,
@@ -451,8 +630,22 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/library":
             json_response(self, {"files": list_library()})
             return
+        if path == "/api/elevenlabs/status":
+            load_local_env()
+            json_response(self, {"configured": bool(elevenlabs_api_key(required=False))})
+            return
+        if path == "/api/elevenlabs/voices":
+            load_local_env()
+            try:
+                json_response(self, {"configured": True, "voices": list_elevenlabs_voices()})
+            except Exception as exc:  # noqa: BLE001 - local tool, show actionable UI error.
+                json_response(self, {"configured": False, "error": str(exc), "voices": []}, 500)
+            return
         if path.startswith("/files/"):
             self.serve_file(READY / path.removeprefix("/files/"))
+            return
+        if path.startswith("/previews/"):
+            self.serve_file(PREVIEWS / path.removeprefix("/previews/"))
             return
         if path == "/":
             self.serve_file(WEB / "index.html")
@@ -461,22 +654,38 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path != "/api/generate":
+        if parsed.path not in {"/api/generate", "/api/elevenlabs/design", "/api/elevenlabs/create-voice"}:
             text_response(self, "not found", 404)
             return
         try:
             length = int(self.headers.get("Content-Length") or "0")
             raw = self.rfile.read(length)
             payload = json.loads(raw.decode("utf-8"))
-            items = payload.get("items") or [payload]
-            results = generate_items(items)
-            json_response(self, {"ok": True, "results": results, "library": list_library()})
+            load_local_env()
+            if parsed.path == "/api/generate":
+                items = payload.get("items") or [payload]
+                results = generate_items(items)
+                json_response(self, {"ok": True, "results": results, "library": list_library()})
+                return
+            if parsed.path == "/api/elevenlabs/design":
+                result = design_elevenlabs_voice(payload)
+                json_response(self, {"ok": True, **result})
+                return
+            if parsed.path == "/api/elevenlabs/create-voice":
+                result = create_elevenlabs_voice(payload)
+                json_response(self, {"ok": True, "voice": result})
+                return
         except Exception as exc:  # noqa: BLE001 - small local tool, return useful UI error.
             json_response(self, {"ok": False, "error": str(exc)}, 500)
 
     def serve_file(self, path: Path) -> None:
         try:
-            base = WEB if not str(path).startswith(str(READY)) else READY
+            if str(path).startswith(str(READY)):
+                base = READY
+            elif str(path).startswith(str(PREVIEWS)):
+                base = PREVIEWS
+            else:
+                base = WEB
             resolved = path.resolve()
             if base.resolve() not in resolved.parents and resolved != base.resolve():
                 text_response(self, "forbidden", 403)
@@ -505,9 +714,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--open", action="store_true", help="Open the browser after starting the local studio.")
     args = parser.parse_args(argv)
 
+    load_local_env()
     if not WEB.exists():
         raise RuntimeError(f"web assets were not found: {WEB}")
     READY.mkdir(parents=True, exist_ok=True)
+    PREVIEWS.mkdir(parents=True, exist_ok=True)
     if not shutil.which(ffmpeg()) and not Path(ffmpeg()).exists():
         raise RuntimeError("ffmpeg binary was not found")
 

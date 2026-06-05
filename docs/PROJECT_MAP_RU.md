@@ -20,6 +20,8 @@ dcs-radioforge/
 ├─ radioforge_launcher.py # Точка входа для PyInstaller
 ├─ requirements.txt    # Зависимости
 ├─ requirements-build.txt # Зависимости для сборки EXE
+├─ .env.example       # Шаблон ElevenLabs key
+├─ Set_ElevenLabs_Key.bat # Локальный помощник для ключа
 ├─ README.md           # Главная страница на английском
 ├─ README_RU.md        # Главная страница на русском
 ├─ CHANGELOG.md        # История релизов
@@ -47,4 +49,5 @@ dcs-radioforge/
 - `voicekit.py` - CSV-режим для пакетной генерации.
 - `run.py` - ленивый запуск из исходников.
 - `radioforge_launcher.py` - входная точка для one-file EXE.
+- `.env` - локальный ElevenLabs key, игнорируется git.
 - `build/` - временный вывод, его не надо пушить на GitHub.

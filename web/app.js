@@ -12,7 +12,10 @@ const i18n = {
     callsign: "Позывной",
     file_id: "Имя файла",
     phrase: "Текст реплики",
+    provider: "Провайдер",
     voice: "Голос",
+    eleven_voice: "Голос ElevenLabs",
+    eleven_model: "Модель ElevenLabs",
     rate: "Скорость",
     pitch: "Тон",
     generate_selected: "Сгенерировать выбранную",
@@ -32,6 +35,17 @@ const i18n = {
     dcs_workflow: "Как вставлять в DCS",
     dcs_tip_1: "Для миссий лучше использовать OGG: файл меньше, качество нормальное. В редакторе DCS добавь SOUND TO ALL или SOUND TO GROUP и выбери файл из build\\dcs-ready.",
     dcs_tip_2: "Для субтитров добавь MESSAGE TO ALL/GROUP тем же триггером.",
+    voice_lab: "Лаборатория голоса",
+    voice_name: "Имя голоса",
+    voice_description: "Описание голоса",
+    preview_text: "Текст превью",
+    refresh_voices: "Обновить голоса",
+    design_voice: "Сгенерировать превью",
+    save_voice: "Сохранить голос",
+    eleven_ready: "ElevenLabs готов",
+    eleven_missing: "Нужен ключ ElevenLabs",
+    no_eleven_voices: "Нет голосов или ключ не настроен",
+    voice_saved: "Голос сохранён",
     no_text: "Пустая реплика",
     voice_role_names: {
       ru_darkstar: "RU командир",
@@ -88,7 +102,10 @@ const i18n = {
     callsign: "Callsign",
     file_id: "File id",
     phrase: "Phrase",
+    provider: "Provider",
     voice: "Voice",
+    eleven_voice: "ElevenLabs voice",
+    eleven_model: "ElevenLabs model",
     rate: "Rate",
     pitch: "Pitch",
     generate_selected: "Generate selected",
@@ -108,6 +125,17 @@ const i18n = {
     dcs_workflow: "DCS workflow",
     dcs_tip_1: "Use OGG for smaller mission files. In DCS Mission Editor add SOUND TO ALL or SOUND TO GROUP, then pick a file from build\\dcs-ready.",
     dcs_tip_2: "For subtitles, add MESSAGE TO ALL/GROUP on the same trigger.",
+    voice_lab: "Voice Lab",
+    voice_name: "Voice name",
+    voice_description: "Voice description",
+    preview_text: "Preview text",
+    refresh_voices: "Refresh voices",
+    design_voice: "Generate previews",
+    save_voice: "Save voice",
+    eleven_ready: "ElevenLabs ready",
+    eleven_missing: "ELEVENLABS_API_KEY needed",
+    no_eleven_voices: "No voices or key is not configured",
+    voice_saved: "Voice saved",
     no_text: "Empty phrase",
     voice_role_names: {
       ru_darkstar: "RU command",
@@ -145,6 +173,9 @@ const i18n = {
 const state = {
   uiLang: new URLSearchParams(location.search).get("lang") || localStorage.getItem("dcs-radioforge-lang") || "ru",
   voices: [],
+  elevenVoices: [],
+  elevenConfigured: false,
+  voicePreviews: [],
   roles: [],
   presets: {},
   selected: 0,
@@ -154,7 +185,11 @@ const state = {
       id: "darkstar_wakeup",
       speaker: "DARKSTAR",
       lang: "ru",
+      provider: "edge",
       voice: "ru-RU-DmitryNeural",
+      elevenVoiceId: "",
+      elevenModel: "eleven_multilingual_v2",
+      elevenLanguage: "ru",
       rate: "+3%",
       pitch: "-8Hz",
       volume: "+0%",
@@ -171,7 +206,11 @@ const samples = [
     id: "awacs_picture_clean",
     speaker: "DARKSTAR",
     lang: "en",
+    provider: "edge",
     voice: "en-US-ChristopherNeural",
+    elevenVoiceId: "",
+    elevenModel: "eleven_multilingual_v2",
+    elevenLanguage: "en",
     rate: "-2%",
     pitch: "-10Hz",
     volume: "+0%",
@@ -184,7 +223,11 @@ const samples = [
     id: "jtac_rifle",
     speaker: "AXEMAN",
     lang: "en",
+    provider: "edge",
     voice: "en-US-SteffanNeural",
+    elevenVoiceId: "",
+    elevenModel: "eleven_multilingual_v2",
+    elevenLanguage: "en",
     rate: "+1%",
     pitch: "-8Hz",
     volume: "+0%",
@@ -197,7 +240,11 @@ const samples = [
     id: "raven_ingress",
     speaker: "RAVEN",
     lang: "ru",
+    provider: "edge",
     voice: "ru-RU-SvetlanaNeural",
+    elevenVoiceId: "",
+    elevenModel: "eleven_multilingual_v2",
+    elevenLanguage: "ru",
     rate: "+1%",
     pitch: "-2Hz",
     volume: "+0%",
@@ -253,6 +300,11 @@ function voiceLabel(voice) {
   return `${voice.name.replace("Neural", "")} - ${role}`;
 }
 
+function elevenVoiceLabel(voice) {
+  const category = voice.category ? ` / ${voice.category}` : "";
+  return `${voice.name || voice.voice_id}${category}`;
+}
+
 function renderLines() {
   els.lineList.innerHTML = "";
   state.lines.forEach((line, index) => {
@@ -270,6 +322,12 @@ function renderLines() {
 
 function renderVoices() {
   const line = selectedLine();
+  line.provider ??= "edge";
+  line.elevenModel ??= "eleven_multilingual_v2";
+  line.elevenLanguage ??= line.lang;
+  els.providerSelect.value = line.provider;
+  els.elevenModelSelect.value = line.elevenModel;
+
   const voices = state.voices.filter(v => v.lang === line.lang);
   els.voiceSelect.innerHTML = "";
   voices.forEach(voice => {
@@ -282,6 +340,32 @@ function renderVoices() {
     line.voice = voices[0].name;
   }
   els.voiceSelect.value = line.voice;
+
+  els.elevenVoiceSelect.innerHTML = "";
+  if (!state.elevenVoices.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = t("no_eleven_voices");
+    els.elevenVoiceSelect.appendChild(option);
+  } else {
+    state.elevenVoices.forEach(voice => {
+      const option = document.createElement("option");
+      option.value = voice.voice_id;
+      option.textContent = elevenVoiceLabel(voice);
+      els.elevenVoiceSelect.appendChild(option);
+    });
+  }
+  if (!state.elevenVoices.some(v => v.voice_id === line.elevenVoiceId) && state.elevenVoices[0]) {
+    line.elevenVoiceId = state.elevenVoices[0].voice_id;
+  }
+  els.elevenVoiceSelect.value = line.elevenVoiceId || "";
+
+  const elevenMode = line.provider === "elevenlabs";
+  els.voiceSelect.disabled = elevenMode;
+  els.elevenVoiceSelect.disabled = !elevenMode || !state.elevenVoices.length;
+  els.elevenModelSelect.disabled = !elevenMode;
+  els.rateInput.disabled = elevenMode;
+  els.pitchInput.disabled = elevenMode;
 }
 
 function renderRoles() {
@@ -322,6 +406,7 @@ function renderPresets() {
 
 function renderEditor() {
   const line = selectedLine();
+  line.provider ??= "edge";
   line.signalQuality ??= 86;
   line.micClicks ??= true;
   els.speakerInput.value = line.speaker;
@@ -332,10 +417,32 @@ function renderEditor() {
   els.signalQuality.value = line.signalQuality;
   els.qualityValue.textContent = `${line.signalQuality}%`;
   els.micClicks.checked = Boolean(line.micClicks);
+  els.elevenStatus.textContent = state.elevenConfigured ? t("eleven_ready") : t("eleven_missing");
+  els.elevenStatus.style.color = state.elevenConfigured ? "var(--green)" : "var(--amber)";
   document.querySelectorAll("#languageControl button").forEach(button => {
     button.classList.toggle("active", button.dataset.lang === line.lang);
   });
   renderVoices();
+}
+
+function renderVoicePreviews() {
+  els.voicePreviewList.innerHTML = "";
+  state.voicePreviews.forEach(preview => {
+    const row = document.createElement("div");
+    row.className = "voice-preview";
+    row.innerHTML = `
+      <div>
+        <strong>${preview.language || "preview"}</strong>
+        <small>${preview.generated_voice_id}</small>
+      </div>
+      ${preview.url ? `<audio controls src="${preview.url}"></audio>` : ""}
+      <button class="secondary compact-button" data-generated-id="${preview.generated_voice_id}">
+        <span>${t("save_voice")}</span>
+      </button>
+    `;
+    row.querySelector("button").addEventListener("click", () => saveDesignedVoice(preview));
+    els.voicePreviewList.appendChild(row);
+  });
 }
 
 function renderResults() {
@@ -369,6 +476,7 @@ function render() {
   renderEditor();
   renderRoles();
   renderPresets();
+  renderVoicePreviews();
   renderResults();
 }
 
@@ -378,7 +486,11 @@ function saveEditor() {
   line.speaker = els.speakerInput.value.trim();
   line.id = els.idInput.value.trim() || "line";
   line.text = els.textInput.value.trim();
+  line.provider = els.providerSelect.value;
   line.voice = els.voiceSelect.value;
+  line.elevenVoiceId = els.elevenVoiceSelect.value;
+  line.elevenModel = els.elevenModelSelect.value;
+  line.elevenLanguage = line.lang;
   line.rate = els.rateInput.value.trim() || "+0%";
   line.pitch = els.pitchInput.value.trim() || "+0Hz";
   line.signalQuality = Number(els.signalQuality.value || 86);
@@ -398,7 +510,12 @@ function payloadFromLine(line) {
     fileName: line.id,
     speaker: line.speaker,
     text: line.text,
+    provider: line.provider || "edge",
     voice: line.voice,
+    elevenVoiceId: line.elevenVoiceId || "",
+    elevenModel: line.elevenModel || "eleven_multilingual_v2",
+    elevenLanguage: line.elevenLanguage || line.lang,
+    lang: line.lang,
     rate: line.rate,
     pitch: line.pitch,
     volume: line.volume || "+0%",
@@ -409,6 +526,101 @@ function payloadFromLine(line) {
     sampleRate: Number(els.sampleRate.value || 22050),
     timestamp: true
   };
+}
+
+async function loadElevenStatus() {
+  const response = await fetch("/api/elevenlabs/status");
+  const data = await response.json();
+  state.elevenConfigured = Boolean(data.configured);
+  if (state.elevenConfigured) {
+    await loadElevenVoices();
+  }
+}
+
+async function loadElevenVoices() {
+  try {
+    const response = await fetch("/api/elevenlabs/voices");
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || "ElevenLabs voices failed");
+    state.elevenConfigured = Boolean(data.configured);
+    state.elevenVoices = data.voices || [];
+    render();
+  } catch (error) {
+    state.elevenVoices = [];
+    state.elevenConfigured = false;
+    setStatus(error.message, false);
+    render();
+  }
+}
+
+async function designVoice() {
+  const description = els.voicePromptInput.value.trim();
+  if (!description) {
+    setStatus(t("voice_description"), false);
+    return;
+  }
+  document.body.classList.add("busy");
+  setStatus(t("status_generating"), true);
+  try {
+    const previewText = els.voicePreviewText.value.trim();
+    const response = await fetch("/api/elevenlabs/design", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voice_description: description,
+        text: previewText.length >= 100 ? previewText : "",
+        model_id: "eleven_multilingual_ttv_v2",
+        auto_generate_text: previewText.length < 100,
+        should_enhance: true,
+        guidance_scale: 7
+      })
+    });
+    const data = await response.json();
+    if (!data.ok) throw new Error(data.error || "Voice design failed");
+    state.voicePreviews = data.previews || [];
+    renderVoicePreviews();
+    setStatus(t("status_ready"), true);
+  } catch (error) {
+    setStatus(error.message, false);
+  } finally {
+    document.body.classList.remove("busy");
+  }
+}
+
+async function saveDesignedVoice(preview) {
+  document.body.classList.add("busy");
+  setStatus(t("status_generating"), true);
+  try {
+    const response = await fetch("/api/elevenlabs/create-voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voice_name: els.voiceNameInput.value.trim() || "DCS RadioForge Voice",
+        voice_description: els.voicePromptInput.value.trim(),
+        generated_voice_id: preview.generated_voice_id,
+        labels: {
+          use_case: "dcs-radioforge",
+          language: selectedLine().lang,
+          category: "mission-radio"
+        }
+      })
+    });
+    const data = await response.json();
+    if (!data.ok) throw new Error(data.error || "Save voice failed");
+    await loadElevenVoices();
+    const voice = data.voice || {};
+    if (voice.voice_id) {
+      const line = selectedLine();
+      line.provider = "elevenlabs";
+      line.elevenVoiceId = voice.voice_id;
+      render();
+    }
+    setStatus(t("voice_saved"), true);
+  } catch (error) {
+    setStatus(error.message, false);
+  } finally {
+    document.body.classList.remove("busy");
+  }
 }
 
 async function generate(items) {
@@ -445,7 +657,10 @@ function bind() {
   els.speakerInput = $("speakerInput");
   els.idInput = $("idInput");
   els.textInput = $("textInput");
+  els.providerSelect = $("providerSelect");
   els.voiceSelect = $("voiceSelect");
+  els.elevenVoiceSelect = $("elevenVoiceSelect");
+  els.elevenModelSelect = $("elevenModelSelect");
   els.rateInput = $("rateInput");
   els.pitchInput = $("pitchInput");
   els.generateSelected = $("generateSelected");
@@ -462,6 +677,20 @@ function bind() {
   els.sampleRate = $("sampleRate");
   els.signalQuality = $("signalQuality");
   els.qualityValue = $("qualityValue");
+  els.elevenStatus = $("elevenStatus");
+  els.refreshElevenVoices = $("refreshElevenVoices");
+  els.designVoice = $("designVoice");
+  els.voiceNameInput = $("voiceNameInput");
+  els.voicePromptInput = $("voicePromptInput");
+  els.voicePreviewText = $("voicePreviewText");
+  els.voicePreviewList = $("voicePreviewList");
+
+  els.voicePromptInput.value = state.uiLang === "ru"
+    ? "Russian male GCI controller, middle aged, calm, cold, disciplined military radio voice, short clipped delivery, serious command tone."
+    : "English AWACS controller, middle aged, calm, authoritative, professional military radio voice, clear NATO-style delivery.";
+  els.voicePreviewText.value = state.uiLang === "ru"
+    ? "Даггер один, это Север. Контакт подтверждён, станция наведения активна. Работай по плану, выход через западный коридор."
+    : "Dagger One, Darkstar. Search radar confirmed active. Continue westbound and hold below angels eight.";
 
   document.querySelectorAll("#uiLanguage button").forEach(button => {
     button.addEventListener("click", () => {
@@ -472,10 +701,10 @@ function bind() {
     });
   });
 
-  ["speakerInput", "idInput", "textInput", "voiceSelect", "rateInput", "pitchInput"].forEach(id => {
+  ["speakerInput", "idInput", "textInput", "providerSelect", "voiceSelect", "elevenVoiceSelect", "elevenModelSelect", "rateInput", "pitchInput"].forEach(id => {
     $(id).addEventListener("input", () => {
       saveEditor();
-      renderLines();
+      render();
     });
   });
 
@@ -493,6 +722,7 @@ function bind() {
       selectedLine().lang = button.dataset.lang;
       const voice = state.voices.find(v => v.lang === button.dataset.lang);
       if (voice) selectedLine().voice = voice.name;
+      selectedLine().elevenLanguage = button.dataset.lang;
       render();
     });
   });
@@ -503,7 +733,11 @@ function bind() {
       id: `line_${state.lines.length + 1}`,
       speaker: "DARKSTAR",
       lang: "ru",
+      provider: "edge",
       voice: "ru-RU-DmitryNeural",
+      elevenVoiceId: state.elevenVoices[0]?.voice_id || "",
+      elevenModel: "eleven_multilingual_v2",
+      elevenLanguage: "ru",
       rate: "+3%",
       pitch: "-8Hz",
       volume: "+0%",
@@ -545,6 +779,8 @@ function bind() {
   });
 
   els.refreshLibrary.addEventListener("click", loadLibrary);
+  els.refreshElevenVoices.addEventListener("click", loadElevenVoices);
+  els.designVoice.addEventListener("click", designVoice);
 }
 
 async function loadLibrary() {
@@ -565,6 +801,7 @@ async function boot() {
   state.voices = voicesData.voices;
   state.roles = voicesData.roles;
   state.presets = presetData.presets;
+  await loadElevenStatus();
   await loadLibrary();
   render();
   setStatus(t("status_ready"), true);

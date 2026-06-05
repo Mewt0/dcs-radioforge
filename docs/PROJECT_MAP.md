@@ -20,6 +20,8 @@ dcs-radioforge/
 ├─ radioforge_launcher.py # PyInstaller entry point
 ├─ requirements.txt    # Runtime dependencies
 ├─ requirements-build.txt # EXE build dependencies
+├─ .env.example       # Optional ElevenLabs key template
+├─ Set_ElevenLabs_Key.bat # Local ElevenLabs key helper
 ├─ README.md           # English GitHub front page
 ├─ README_RU.md        # Russian GitHub front page
 ├─ CHANGELOG.md        # Release history
@@ -46,4 +48,5 @@ UI line editor
 - `voicekit.py` is the simpler CSV workflow for batch generation.
 - `run.py` owns the lazy source launch flow.
 - `radioforge_launcher.py` owns the one-file EXE entry point.
+- `.env` stores optional local ElevenLabs credentials and is ignored by git.
 - `build/` is disposable generated output and should not be committed.

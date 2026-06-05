@@ -1,5 +1,8 @@
 .venv/
 .venv-build/
+.env
+.env.*
+!.env.example
 build/
 __pycache__/
 *.pyc
