@@ -27,5 +27,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: DCS-RadioForge-windows-portable
-          path: release/DCS-RadioForge-v0.1.3-windows-portable.zip
+          path: release/DCS-RadioForge-v0.1.4-windows-portable.zip
           if-no-files-found: error

@@ -47,6 +47,17 @@ const i18n = {
     no_eleven_voices: "Нет голосов или ключ не настроен",
     voice_saved: "Голос сохранён",
     no_text: "Пустая реплика",
+    eleven_balance: "Баланс ElevenLabs",
+    eleven_estimate_selected: "Выбранная реплика",
+    eleven_estimate_all: "Все ElevenLabs реплики",
+    eleven_last_cost: "Последнее списание",
+    eleven_balance_value: (used, limit, remaining, tier) => `${remaining} из ${limit} осталось / ${tier}`,
+    eleven_balance_unlimited: (used, tier) => `${used} использовано / ${tier}`,
+    eleven_estimate_value: (chars, credits) => `${chars} симв. / ~${credits} credits`,
+    eleven_actual_value: (credits, chars) => `${credits} credits / ${chars} симв.`,
+    eleven_no_cost: "0 credits",
+    eleven_edge_free: "Edge TTS: бесплатно",
+    eleven_usage_unknown: "Нет данных",
     voice_role_names: {
       ru_darkstar: "RU командир",
       ru_raven: "RU ударная группа",
@@ -137,6 +148,17 @@ const i18n = {
     no_eleven_voices: "No voices or key is not configured",
     voice_saved: "Voice saved",
     no_text: "Empty phrase",
+    eleven_balance: "ElevenLabs balance",
+    eleven_estimate_selected: "Selected line",
+    eleven_estimate_all: "All ElevenLabs lines",
+    eleven_last_cost: "Last charge",
+    eleven_balance_value: (used, limit, remaining, tier) => `${remaining} of ${limit} left / ${tier}`,
+    eleven_balance_unlimited: (used, tier) => `${used} used / ${tier}`,
+    eleven_estimate_value: (chars, credits) => `${chars} chars / ~${credits} credits`,
+    eleven_actual_value: (credits, chars) => `${credits} credits / ${chars} chars`,
+    eleven_no_cost: "0 credits",
+    eleven_edge_free: "Edge TTS: free",
+    eleven_usage_unknown: "No data",
     voice_role_names: {
       ru_darkstar: "RU command",
       ru_raven: "RU strike",
@@ -175,6 +197,9 @@ const state = {
   voices: [],
   elevenVoices: [],
   elevenConfigured: false,
+  elevenUsage: null,
+  elevenModels: [],
+  lastElevenUsage: null,
   voicePreviews: [],
   roles: [],
   presets: {},
@@ -264,6 +289,82 @@ function $(id) {
 function t(key, ...args) {
   const value = i18n[state.uiLang][key];
   return typeof value === "function" ? value(...args) : value;
+}
+
+function numberText(value, digits = 0) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "-";
+  }
+  return new Intl.NumberFormat(state.uiLang === "ru" ? "ru-RU" : "en-US", {
+    maximumFractionDigits: digits
+  }).format(Number(value));
+}
+
+function textCharacters(text) {
+  return Array.from((text || "").trim()).length;
+}
+
+function modelMultiplier(modelId) {
+  const model = state.elevenModels.find(item => item.model_id === modelId);
+  const multiplier = model?.effective_character_cost_multiplier
+    ?? model?.character_cost_multiplier
+    ?? model?.token_cost_factor;
+  return Number(multiplier || 1);
+}
+
+function estimateLineCost(line) {
+  if ((line.provider || "edge") !== "elevenlabs") {
+    return { chars: 0, credits: 0, active: false };
+  }
+  const chars = textCharacters(line.text);
+  return {
+    chars,
+    credits: chars * modelMultiplier(line.elevenModel || "eleven_multilingual_v2"),
+    active: true
+  };
+}
+
+function formatEstimate(estimate) {
+  if (!estimate.active) return t("eleven_edge_free");
+  if (!estimate.chars) return t("eleven_no_cost");
+  return t("eleven_estimate_value", numberText(estimate.chars), numberText(estimate.credits, 1));
+}
+
+function allElevenEstimate() {
+  return state.lines.reduce(
+    (total, line) => {
+      const estimate = estimateLineCost(line);
+      return {
+        chars: total.chars + estimate.chars,
+        credits: total.credits + estimate.credits,
+        active: total.active || estimate.active
+      };
+    },
+    { chars: 0, credits: 0, active: false }
+  );
+}
+
+function formatElevenBalance() {
+  const subscription = state.elevenUsage?.subscription;
+  if (!state.elevenConfigured) return t("eleven_missing");
+  if (!subscription) return t("eleven_usage_unknown");
+  const used = subscription.character_count;
+  const limit = subscription.character_limit;
+  const tier = subscription.tier || subscription.status || "plan";
+  if (used === null || used === undefined) return t("eleven_usage_unknown");
+  if (limit === null || limit === undefined) {
+    return t("eleven_balance_unlimited", numberText(used), tier);
+  }
+  const remaining = Math.max(0, Number(limit) - Number(used));
+  return t("eleven_balance_value", numberText(used), numberText(limit), numberText(remaining), tier);
+}
+
+function formatLastElevenUsage() {
+  const usage = state.lastElevenUsage;
+  if (!usage || !usage.requests) return "-";
+  const credits = usage.character_count ?? 0;
+  const chars = usage.text_characters ?? 0;
+  return t("eleven_actual_value", numberText(credits), numberText(chars));
 }
 
 function selectedLine() {
@@ -417,12 +518,23 @@ function renderEditor() {
   els.signalQuality.value = line.signalQuality;
   els.qualityValue.textContent = `${line.signalQuality}%`;
   els.micClicks.checked = Boolean(line.micClicks);
-  els.elevenStatus.textContent = state.elevenConfigured ? t("eleven_ready") : t("eleven_missing");
+  const tier = state.elevenUsage?.subscription?.tier;
+  els.elevenStatus.textContent = state.elevenConfigured
+    ? `${t("eleven_ready")}${tier ? ` / ${tier}` : ""}`
+    : t("eleven_missing");
   els.elevenStatus.style.color = state.elevenConfigured ? "var(--green)" : "var(--amber)";
   document.querySelectorAll("#languageControl button").forEach(button => {
     button.classList.toggle("active", button.dataset.lang === line.lang);
   });
   renderVoices();
+  renderElevenUsage();
+}
+
+function renderElevenUsage() {
+  els.elevenBalance.textContent = formatElevenBalance();
+  els.elevenEstimateSelected.textContent = formatEstimate(estimateLineCost(selectedLine()));
+  els.elevenEstimateAll.textContent = formatEstimate(allElevenEstimate());
+  els.elevenLastCost.textContent = formatLastElevenUsage();
 }
 
 function renderVoicePreviews() {
@@ -533,7 +645,7 @@ async function loadElevenStatus() {
   const data = await response.json();
   state.elevenConfigured = Boolean(data.configured);
   if (state.elevenConfigured) {
-    await loadElevenVoices();
+    await Promise.all([loadElevenVoices(), loadElevenUsage()]);
   }
 }
 
@@ -548,6 +660,23 @@ async function loadElevenVoices() {
   } catch (error) {
     state.elevenVoices = [];
     state.elevenConfigured = false;
+    setStatus(error.message, false);
+    render();
+  }
+}
+
+async function loadElevenUsage() {
+  try {
+    const response = await fetch("/api/elevenlabs/usage");
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || "ElevenLabs usage failed");
+    state.elevenConfigured = Boolean(data.configured);
+    state.elevenUsage = data;
+    state.elevenModels = data.models || [];
+    render();
+  } catch (error) {
+    state.elevenUsage = null;
+    state.elevenModels = [];
     setStatus(error.message, false);
     render();
   }
@@ -637,8 +766,15 @@ async function generate(items) {
     if (!data.ok) throw new Error(data.error || "Generation failed");
     const files = [];
     data.results.forEach(result => result.files.forEach(file => files.push(file)));
+    if (data.elevenlabs?.requests) {
+      state.lastElevenUsage = data.elevenlabs;
+      await loadElevenUsage();
+    }
     state.results = [...files, ...state.results];
-    setStatus(t("status_generated", files.length), true);
+    const usageText = data.elevenlabs?.requests
+      ? ` / ${formatLastElevenUsage()}`
+      : "";
+    setStatus(`${t("status_generated", files.length)}${usageText}`, true);
     renderResults();
   } catch (error) {
     console.error(error);
@@ -661,6 +797,11 @@ function bind() {
   els.voiceSelect = $("voiceSelect");
   els.elevenVoiceSelect = $("elevenVoiceSelect");
   els.elevenModelSelect = $("elevenModelSelect");
+  els.elevenUsageCard = $("elevenUsageCard");
+  els.elevenBalance = $("elevenBalance");
+  els.elevenEstimateSelected = $("elevenEstimateSelected");
+  els.elevenEstimateAll = $("elevenEstimateAll");
+  els.elevenLastCost = $("elevenLastCost");
   els.rateInput = $("rateInput");
   els.pitchInput = $("pitchInput");
   els.generateSelected = $("generateSelected");
@@ -779,7 +920,10 @@ function bind() {
   });
 
   els.refreshLibrary.addEventListener("click", loadLibrary);
-  els.refreshElevenVoices.addEventListener("click", loadElevenVoices);
+  els.refreshElevenVoices.addEventListener("click", () => {
+    loadElevenVoices();
+    loadElevenUsage();
+  });
   els.designVoice.addEventListener("click", designVoice);
 }
 

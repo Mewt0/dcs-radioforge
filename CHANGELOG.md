@@ -2,6 +2,15 @@
 
 All notable changes to DCS RadioForge are documented here.
 
+## 0.1.4 - 2026-06-05
+
+### Added
+
+- ElevenLabs balance panel using `GET /v1/user/subscription`.
+- Estimated character/credit cost for the selected line and all ElevenLabs lines.
+- Actual ElevenLabs generation cost from the `x-character-count` response header.
+- Model cost multiplier loading from `GET /v1/models`.
+
 ## 0.1.3 - 2026-06-05
 
 ### Fixed

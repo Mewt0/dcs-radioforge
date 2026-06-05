@@ -1,21 +1,20 @@
-# DCS RadioForge 0.1.3
+# DCS RadioForge 0.1.4
 
-This release updates the ElevenLabs integration against the current official API reference.
+This release adds ElevenLabs balance and generation cost visibility.
 
 ## Highlights
 
-- Voice list loading now uses `GET /v2/voices`.
-- Voice list pagination is supported for larger ElevenLabs accounts.
-- Text to Speech remains on `POST /v1/text-to-speech/:voice_id`.
-- Voice Design remains on `POST /v1/text-to-voice/design`.
-- Saving generated voices remains on `POST /v1/text-to-voice`.
+- Shows ElevenLabs subscription balance from `GET /v1/user/subscription`.
+- Shows estimated character/credit cost for the selected line and all ElevenLabs lines.
+- Captures actual `x-character-count` returned by ElevenLabs after TTS generation.
+- Loads model cost multipliers from `GET /v1/models`.
 - Windows portable EXE package still works without Python installed.
 
 ## Release Assets
 
-- `DCS-RadioForge-v0.1.3-windows-portable.zip` - recommended Windows package.
-- `dcs-radioforge-v0.1.3-source.zip` - source package with Python launchers.
-- `dcs-radioforge-v0.1.3-demo-audio.zip` - optional generated audio examples.
+- `DCS-RadioForge-v0.1.4-windows-portable.zip` - recommended Windows package.
+- `dcs-radioforge-v0.1.4-source.zip` - source package with Python launchers.
+- `dcs-radioforge-v0.1.4-demo-audio.zip` - optional generated audio examples.
 
 ## Notes
 

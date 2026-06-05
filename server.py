@@ -261,7 +261,8 @@ def elevenlabs_request(
     payload: dict | None = None,
     query: dict | None = None,
     binary: bool = False,
-) -> bytes | dict:
+    include_headers: bool = False,
+) -> bytes | dict | list | tuple[bytes | dict | list, dict[str, str]]:
     key = elevenlabs_api_key(required=True)
     url = f"{ELEVENLABS_HOST}{path}" if path.startswith("/v") else f"{ELEVENLABS_V1}{path}"
     if query:
@@ -274,14 +275,105 @@ def elevenlabs_request(
     try:
         with request.urlopen(req, timeout=120) as response:
             raw = response.read()
+            response_headers = {key.lower(): value for key, value in response.headers.items()}
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"ElevenLabs API error {exc.code}: {detail}") from exc
     if binary:
-        return raw
+        return (raw, response_headers) if include_headers else raw
+    data: dict | list
     if not raw:
+        data = {}
+    else:
+        data = json.loads(raw.decode("utf-8"))
+    return (data, response_headers) if include_headers else data
+
+
+def int_or_none(value: object) -> int | None:
+    try:
+        if value in (None, ""):
+            return None
+        return int(float(str(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def float_or_none(value: object) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        return float(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def elevenlabs_usage_from_headers(headers: dict[str, str]) -> dict:
+    character_count = int_or_none(headers.get("x-character-count"))
+    request_id = headers.get("request-id") or headers.get("x-request-id") or ""
+    return {
+        "character_count": character_count,
+        "request_id": request_id,
+    }
+
+
+def get_elevenlabs_subscription() -> dict:
+    data = elevenlabs_request("GET", "/user/subscription")
+    if not isinstance(data, dict):
         return {}
-    return json.loads(raw.decode("utf-8"))
+    overage = data.get("current_overage") or {}
+    next_invoice = data.get("next_invoice") or {}
+    return {
+        "tier": data.get("tier") or "",
+        "status": data.get("status") or "",
+        "character_count": int_or_none(data.get("character_count")),
+        "character_limit": int_or_none(data.get("character_limit")),
+        "max_credit_limit_extension": data.get("max_credit_limit_extension"),
+        "current_overage": {
+            "amount": overage.get("amount") if isinstance(overage, dict) else None,
+            "currency": overage.get("currency") if isinstance(overage, dict) else None,
+        },
+        "has_open_invoices": bool(data.get("has_open_invoices")),
+        "next_invoice": {
+            "amount_due_cents": int_or_none(next_invoice.get("amount_due_cents")) if isinstance(next_invoice, dict) else None,
+        },
+        "next_character_count_reset_unix": int_or_none(data.get("next_character_count_reset_unix")),
+        "currency": data.get("currency") or "",
+        "billing_period": data.get("billing_period") or "",
+        "character_refresh_period": data.get("character_refresh_period") or "",
+    }
+
+
+def list_elevenlabs_models() -> list[dict]:
+    data = elevenlabs_request("GET", "/models")
+    if not isinstance(data, list):
+        return []
+    models: list[dict] = []
+    for model in data:
+        if not isinstance(model, dict) or not model.get("can_do_text_to_speech", True):
+            continue
+        rates = model.get("model_rates") or {}
+        character_multiplier = float_or_none(rates.get("character_cost_multiplier")) if isinstance(rates, dict) else None
+        discount_multiplier = float_or_none(rates.get("cost_discount_multiplier")) if isinstance(rates, dict) else None
+        token_cost_factor = float_or_none(model.get("token_cost_factor"))
+        effective_multiplier = character_multiplier
+        if effective_multiplier is not None and discount_multiplier is not None:
+            effective_multiplier *= discount_multiplier
+        if effective_multiplier is None:
+            effective_multiplier = token_cost_factor
+        models.append(
+            {
+                "model_id": model.get("model_id") or "",
+                "name": model.get("name") or model.get("model_id") or "",
+                "token_cost_factor": token_cost_factor,
+                "character_cost_multiplier": character_multiplier,
+                "cost_discount_multiplier": discount_multiplier,
+                "effective_character_cost_multiplier": effective_multiplier,
+                "maximum_text_length_per_request": int_or_none(model.get("maximum_text_length_per_request")),
+                "max_characters_request_free_user": int_or_none(model.get("max_characters_request_free_user")),
+                "max_characters_request_subscribed_user": int_or_none(model.get("max_characters_request_subscribed_user")),
+            }
+        )
+    return models
 
 
 async def synthesize_mp3(text: str, voice: str, rate: str, pitch: str, volume: str, target: Path) -> None:
@@ -295,7 +387,7 @@ def synthesize_elevenlabs_mp3(
     model_id: str,
     language_code: str,
     target: Path,
-) -> None:
+) -> dict:
     if not voice_id:
         raise RuntimeError("ElevenLabs voice id is empty")
     payload: dict = {
@@ -310,14 +402,23 @@ def synthesize_elevenlabs_mp3(
     }
     if language_code:
         payload["language_code"] = language_code
-    raw = elevenlabs_request(
+    raw, headers = elevenlabs_request(
         "POST",
         f"/text-to-speech/{parse.quote(voice_id)}",
         payload=payload,
         query={"output_format": "mp3_44100_128"},
         binary=True,
+        include_headers=True,
     )
     target.write_bytes(raw)  # type: ignore[arg-type]
+    usage = elevenlabs_usage_from_headers(headers)
+    usage.update(
+        {
+            "model_id": model_id or "eleven_multilingual_v2",
+            "text_characters": len(text),
+        }
+    )
+    return usage
 
 
 def list_elevenlabs_voices() -> list[dict]:
@@ -521,6 +622,8 @@ def append_manifest(rows: list[dict]) -> None:
             "wav",
             "ogg",
             "duration_sec",
+            "elevenlabs_character_cost",
+            "elevenlabs_text_characters",
             "text",
         ]
         writer = csv.DictWriter(f, fieldnames=fields)
@@ -561,8 +664,9 @@ def generate_items(items: list[dict]) -> list[dict]:
             basename = f"{basename}_{now}"
 
         mp3 = TMP / f"{basename}.mp3"
+        elevenlabs_usage: dict | None = None
         if provider == "elevenlabs":
-            synthesize_elevenlabs_mp3(text, eleven_voice_id, eleven_model, eleven_language, mp3)
+            elevenlabs_usage = synthesize_elevenlabs_mp3(text, eleven_voice_id, eleven_model, eleven_language, mp3)
             voice_label = eleven_voice_id
         else:
             asyncio.run(synthesize_mp3(text, voice, rate, pitch, volume, mp3))
@@ -580,8 +684,14 @@ def generate_items(items: list[dict]) -> list[dict]:
             "wav": "",
             "ogg": "",
             "duration_sec": "",
+            "elevenlabs_character_cost": "",
+            "elevenlabs_text_characters": "",
             "files": [],
         }
+        if elevenlabs_usage:
+            row["elevenlabs"] = elevenlabs_usage
+            row["elevenlabs_character_cost"] = elevenlabs_usage.get("character_count") or ""
+            row["elevenlabs_text_characters"] = elevenlabs_usage.get("text_characters") or ""
         for fmt in formats:
             if fmt not in {"wav", "ogg"}:
                 continue
@@ -605,6 +715,29 @@ def generate_items(items: list[dict]) -> list[dict]:
         results.append(row)
     append_manifest(results)
     return results
+
+
+def aggregate_elevenlabs_usage(results: list[dict]) -> dict:
+    total_character_cost = 0
+    total_text_characters = 0
+    requests_count = 0
+    request_ids: list[str] = []
+    for row in results:
+        usage = row.get("elevenlabs") or {}
+        if not isinstance(usage, dict):
+            continue
+        requests_count += 1
+        total_character_cost += int_or_none(usage.get("character_count")) or 0
+        total_text_characters += int_or_none(usage.get("text_characters")) or 0
+        request_id = usage.get("request_id")
+        if request_id:
+            request_ids.append(str(request_id))
+    return {
+        "requests": requests_count,
+        "character_count": total_character_cost if requests_count else None,
+        "text_characters": total_text_characters if requests_count else None,
+        "request_ids": request_ids,
+    }
 
 
 def list_library() -> list[dict]:
@@ -655,6 +788,24 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:  # noqa: BLE001 - local tool, show actionable UI error.
                 json_response(self, {"configured": False, "error": str(exc), "voices": []}, 500)
             return
+        if path == "/api/elevenlabs/usage":
+            load_local_env()
+            try:
+                json_response(
+                    self,
+                    {
+                        "configured": True,
+                        "subscription": get_elevenlabs_subscription(),
+                        "models": list_elevenlabs_models(),
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001 - local tool, show actionable UI error.
+                json_response(
+                    self,
+                    {"configured": False, "error": str(exc), "subscription": {}, "models": []},
+                    500,
+                )
+            return
         if path.startswith("/files/"):
             self.serve_file(READY / path.removeprefix("/files/"))
             return
@@ -679,7 +830,15 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/generate":
                 items = payload.get("items") or [payload]
                 results = generate_items(items)
-                json_response(self, {"ok": True, "results": results, "library": list_library()})
+                json_response(
+                    self,
+                    {
+                        "ok": True,
+                        "results": results,
+                        "library": list_library(),
+                        "elevenlabs": aggregate_elevenlabs_usage(results),
+                    },
+                )
                 return
             if parsed.path == "/api/elevenlabs/design":
                 result = design_elevenlabs_voice(payload)

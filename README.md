@@ -26,7 +26,7 @@ The current audio pack is **SRS-like**: it does not use SRS code and is not an S
 
 For most Windows users, use the release package:
 
-1. Download `DCS-RadioForge-v0.1.3-windows-portable.zip` from the latest release.
+1. Download `DCS-RadioForge-v0.1.4-windows-portable.zip` from the latest release.
 2. Unzip it anywhere.
 3. Run `DCS-RadioForge.exe`.
 4. The browser opens automatically.
@@ -53,7 +53,7 @@ Or create a `.env` file next to the EXE or source files:
 ELEVENLABS_API_KEY=your_new_key_here
 ```
 
-Then restart DCS RadioForge, switch a line's provider to `ElevenLabs`, refresh voices, or use the **Voice Lab** panel to design a new synthetic voice. Never commit `.env` to GitHub. If a key was shared in chat or a public place, revoke it and create a new one before using it.
+Then restart DCS RadioForge, switch a line's provider to `ElevenLabs`, refresh voices, or use the **Voice Lab** panel to design a new synthetic voice. The editor shows subscription balance, estimated character/credit cost, and the actual `x-character-count` returned after generation. Never commit `.env` to GitHub. If a key was shared in chat or a public place, revoke it and create a new one before using it.
 
 ## Quick Start From Source
 
@@ -133,7 +133,7 @@ To build the portable EXE locally:
 The output is written to:
 
 ```text
-release/DCS-RadioForge-v0.1.3-windows-portable.zip
+release/DCS-RadioForge-v0.1.4-windows-portable.zip
 ```
 
 ## Project Map

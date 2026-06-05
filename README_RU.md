@@ -21,7 +21,7 @@ English documentation: [README.md](README.md)
 
 Самый простой вариант для Windows:
 
-1. Скачай `DCS-RadioForge-v0.1.3-windows-portable.zip` из последнего релиза.
+1. Скачай `DCS-RadioForge-v0.1.4-windows-portable.zip` из последнего релиза.
 2. Распакуй куда удобно.
 3. Запусти `DCS-RadioForge.exe`.
 4. Браузер откроется сам.
@@ -48,7 +48,7 @@ Set_ElevenLabs_Key.bat
 ELEVENLABS_API_KEY=your_new_key_here
 ```
 
-Потом перезапусти DCS RadioForge, выбери у реплики provider `ElevenLabs`, обнови список голосов или используй панель **Voice Lab** для создания нового синтетического голоса. `.env` нельзя коммитить на GitHub. Если ключ уже был отправлен в чат или публичное место, отзови его и создай новый.
+Потом перезапусти DCS RadioForge, выбери у реплики provider `ElevenLabs`, обнови список голосов или используй панель **Voice Lab** для создания нового синтетического голоса. Редактор показывает баланс подписки, примерную стоимость в characters/credits и фактический `x-character-count` после генерации. `.env` нельзя коммитить на GitHub. Если ключ уже был отправлен в чат или публичное место, отзови его и создай новый.
 
 ## Быстрый старт из исходников
 
@@ -128,7 +128,7 @@ http://127.0.0.1:8765/?lang=en
 Результат:
 
 ```text
-release/DCS-RadioForge-v0.1.3-windows-portable.zip
+release/DCS-RadioForge-v0.1.4-windows-portable.zip
 ```
 
 ## Карта проекта

@@ -7,18 +7,18 @@ This project is ready to publish as `dcs-radioforge`.
 ```powershell
 git init
 git add .
-git commit -m "Release DCS RadioForge 0.1.3"
+git commit -m "Release DCS RadioForge 0.1.4"
 git branch -M main
 git remote add origin https://github.com/YOUR_USER/dcs-radioforge.git
 git push -u origin main
-git tag v0.1.3
-git push origin v0.1.3
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 Then create a GitHub release:
 
 ```powershell
-gh release create v0.1.3 ..\dcs-radioforge-v0.1.3-source.zip ..\DCS-RadioForge-v0.1.3-windows-portable.zip --title "DCS RadioForge 0.1.3" --notes-file RELEASE_NOTES.md
+gh release create v0.1.4 ..\dcs-radioforge-v0.1.4-source.zip ..\DCS-RadioForge-v0.1.4-windows-portable.zip --title "DCS RadioForge 0.1.4" --notes-file RELEASE_NOTES.md
 ```
 
 ## GitHub CLI One-Shot
@@ -27,9 +27,9 @@ If `gh` is installed and logged in:
 
 ```powershell
 gh repo create dcs-radioforge --public --source . --remote origin --push
-git tag v0.1.3
-git push origin v0.1.3
-gh release create v0.1.3 ..\dcs-radioforge-v0.1.3-source.zip ..\DCS-RadioForge-v0.1.3-windows-portable.zip --title "DCS RadioForge 0.1.3" --notes-file RELEASE_NOTES.md
+git tag v0.1.4
+git push origin v0.1.4
+gh release create v0.1.4 ..\dcs-radioforge-v0.1.4-source.zip ..\DCS-RadioForge-v0.1.4-windows-portable.zip --title "DCS RadioForge 0.1.4" --notes-file RELEASE_NOTES.md
 ```
 
 Use `--private` instead of `--public` if you want to keep the repository private at first.
