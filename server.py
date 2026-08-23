@@ -34,6 +34,7 @@ BUILD = APP_ROOT / "build"
 READY = BUILD / "dcs-ready"
 TMP = BUILD / "_tmp_mp3"
 PREVIEWS = BUILD / "elevenlabs-previews"
+BACKUP_DIR = BUILD / "rf_backup"
 ELEVENLABS_HOST = "https://api.elevenlabs.io"
 ELEVENLABS_V1 = f"{ELEVENLABS_HOST}/v1"
 
@@ -942,6 +943,14 @@ class PreviewError(Exception):
         self.code = code
 
 
+class ReplaceError(Exception):
+    """Error for /api/replace (voice-over replacement) with a machine-readable code."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 PREVIEW_TEXT_LIMIT = 1000
 
 PIPER_SETUP_ERRORS: dict[str, tuple[str, str]] = {
@@ -1094,6 +1103,128 @@ def list_library() -> list[dict]:
     return rows
 
 
+def probe_audio(path: Path) -> dict:
+    """Read sample rate / channel layout of an audio file via ffmpeg."""
+    result = subprocess.run(
+        [ffmpeg(), "-hide_banner", "-nostats", "-i", str(path)],
+        capture_output=True,
+        text=True,
+        errors="replace",
+        check=False,
+    )
+    text = (result.stdout or "") + (result.stderr or "")
+    info: dict = {"codec": None, "sample_rate": None, "channels": 1}
+    match = re.search(r"Audio:\s*([a-z0-9_]+)", text)
+    if match:
+        info["codec"] = match.group(1)
+    match = re.search(r"(\d+)\s*Hz", text)
+    if match:
+        info["sample_rate"] = int(match.group(1))
+    match = re.search(r"Hz,\s*([a-z0-9]+)", text)
+    if match and match.group(1).startswith("stereo"):
+        info["channels"] = 2
+    return info
+
+
+def _format_codec(fmt: str) -> list[str]:
+    """ffmpeg encoding args for wav/ogg/mp3."""
+    if fmt == "ogg":
+        return ["-c:a", "libvorbis", "-q:a", "4"]
+    if fmt == "mp3":
+        return ["-c:a", "libmp3lame", "-b:a", "192k"]
+    return ["-c:a", "pcm_s16le"]
+
+
+def replace_audio(payload: dict) -> dict:
+    """Voice-over a text line and replace an existing audio file in place.
+
+    The server is the single owner of the replacement: it probes the original
+    format/sample rate, backs it up, synthesizes the text with the chosen
+    provider, applies the radio preset, converts strictly to the original
+    format, and atomically swaps the file via os.replace. The file name and
+    mapResource keys stay untouched (DCS-safe).
+    """
+    raw_path = (payload.get("path") or "").strip()
+    text = (payload.get("text") or "").strip()
+    if not raw_path or not text:
+        raise ReplaceError("path and text are required", "missing_fields")
+    target = Path(raw_path)
+    if not target.exists() or not target.is_file():
+        raise ReplaceError(f"Audio file not found: {target}", "file_not_found")
+    ext = target.suffix.lower()
+    if ext not in {".wav", ".ogg", ".mp3"}:
+        raise ReplaceError(f"Unsupported audio format: {ext}", "bad_extension")
+
+    probe = probe_audio(target)
+    sample_rate = int(probe.get("sample_rate") or 24000)
+    channels = int(probe.get("channels") or 1)
+    fmt = ext.lstrip(".")
+    provider = (payload.get("provider") or "external").strip() or "external"
+    preset_id = payload.get("preset") or "srs_cockpit"
+    signal_quality = int(payload.get("signalQuality") or 86)
+    mic_clicks = bool(payload.get("micClicks", True))
+    voice = (payload.get("voice") or "").strip()
+
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    backup = BACKUP_DIR / f"{target.stem}_{target.suffix.lstrip('.')}_{stamp}.bak"
+    shutil.copy2(target, backup)
+
+    TMP.mkdir(parents=True, exist_ok=True)
+    basename = f"replace_{uuid.uuid4().hex[:8]}"
+    source = TMP / f"{basename}.{tts.provider_source_format(provider)}"
+    converted: Path | None = None
+    tmp_target: Path | None = None
+    try:
+        item: dict = {"provider": provider, "text": text}
+        if voice:
+            item["voice"] = voice
+        _, voice_label = tts.synthesize_item(item, source)
+
+        if fmt in {"wav", "ogg"}:
+            converted = TMP / f"{basename}.{fmt}"
+            convert_audio(source, converted, fmt, sample_rate, preset_id, signal_quality, mic_clicks)
+        else:  # mp3: convert via wav stage
+            staged_wav = TMP / f"{basename}_conv.wav"
+            convert_audio(source, staged_wav, "wav", sample_rate, preset_id, signal_quality, mic_clicks)
+            converted = TMP / f"{basename}.mp3"
+            run_ffmpeg(["-i", str(staged_wav), *_format_codec("mp3"), str(converted)])
+            staged_wav.unlink(missing_ok=True)
+
+        if channels == 2:
+            stereo = TMP / f"{basename}_stereo.{fmt}"
+            run_ffmpeg(
+                ["-i", str(converted), "-af", "aformat=channel_layouts=stereo", *_format_codec(fmt), str(stereo)]
+            )
+            converted.unlink(missing_ok=True)
+            converted = stereo
+
+        tmp_target = target.with_name(f".{target.name}.tmp{uuid.uuid4().hex[:6]}")
+        shutil.copy2(converted, tmp_target)
+        os.replace(tmp_target, target)
+        tmp_target = None
+
+        duration = wav_duration(target) if fmt == "wav" else None
+        return {
+            "ok": True,
+            "path": str(target),
+            "format": fmt,
+            "sample_rate": sample_rate,
+            "channels": channels,
+            "duration": duration,
+            "voice": voice_label,
+            "backup": str(backup),
+        }
+    except tts.ExternalTTSError as exc:
+        raise ReplaceError(str(exc), f"external_{exc.code}") from exc
+    finally:
+        if tmp_target is not None:
+            tmp_target.unlink(missing_ok=True)
+        source.unlink(missing_ok=True)
+        if converted is not None:
+            converted.unlink(missing_ok=True)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "DCSVoiceStudio/1.0"
 
@@ -1167,6 +1298,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/elevenlabs/design",
             "/api/elevenlabs/create-voice",
             "/api/tts/preview",
+            "/api/replace",
         }:
             text_response(self, "not found", 404)
             return
@@ -1200,7 +1332,13 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/tts/preview":
                 json_response(self, {"ok": True, **tts_preview(payload)})
                 return
+            if parsed.path == "/api/replace":
+                json_response(self, replace_audio(payload))
+                return
         except PreviewError as exc:
+            json_response(self, {"ok": False, "error": str(exc), "code": exc.code}, 400)
+        except ReplaceError as exc:
+            json_response(self, {"ok": False, "error": str(exc), "code": exc.code}, 400)
             json_response(self, {"ok": False, "error": str(exc), "code": exc.code}, 400)
         except Exception as exc:  # noqa: BLE001 - small local tool, return useful UI error.
             json_response(self, {"ok": False, "error": str(exc)}, 500)
