@@ -58,6 +58,12 @@ const i18n = {
     eleven_no_cost: "0 credits",
     eleven_edge_free: "Edge TTS: бесплатно",
     eleven_usage_unknown: "Нет данных",
+    piper_free: "Piper: бесплатно (offline)",
+    provider_ready: "готов",
+    piper_reason_disabled: "не включён (RF_PIPER_ENABLED)",
+    piper_reason_not_installed: "пакет piper не установлен",
+    piper_reason_model_dir_missing: "папка моделей не найдена",
+    piper_reason_no_models: "в папке моделей нет голосов",
     voice_role_names: {
       ru_darkstar: "RU командир",
       ru_raven: "RU ударная группа",
@@ -159,6 +165,12 @@ const i18n = {
     eleven_no_cost: "0 credits",
     eleven_edge_free: "Edge TTS: free",
     eleven_usage_unknown: "No data",
+    piper_free: "Piper: free (offline)",
+    provider_ready: "ready",
+    piper_reason_disabled: "not enabled (RF_PIPER_ENABLED)",
+    piper_reason_not_installed: "piper package not installed",
+    piper_reason_model_dir_missing: "model dir missing",
+    piper_reason_no_models: "no voices in model dir",
     voice_role_names: {
       ru_darkstar: "RU command",
       ru_raven: "RU strike",
@@ -200,6 +212,8 @@ const state = {
   elevenUsage: null,
   elevenModels: [],
   lastElevenUsage: null,
+  ttsProviders: null,
+  piperVoices: [],
   voicePreviews: [],
   roles: [],
   presets: {},
@@ -325,7 +339,11 @@ function estimateLineCost(line) {
 }
 
 function formatEstimate(estimate) {
-  if (!estimate.active) return t("eleven_edge_free");
+  if (!estimate.active) {
+    const provider = selectedLine()?.provider || "edge";
+    if (provider === "piper") return t("piper_free");
+    return t("eleven_edge_free");
+  }
   if (!estimate.chars) return t("eleven_no_cost");
   return t("eleven_estimate_value", numberText(estimate.chars), numberText(estimate.credits, 1));
 }
@@ -369,6 +387,57 @@ function formatLastElevenUsage() {
 
 function selectedLine() {
   return state.lines[state.selected];
+}
+
+function piperStatus() {
+  return state.ttsProviders?.providers?.piper || { available: false, reason: "disabled" };
+}
+
+function providerAvailable(provider) {
+  if (provider === "piper") return Boolean(piperStatus().available);
+  return true;
+}
+
+function providerReasonText(provider) {
+  if (provider === "piper") {
+    const status = piperStatus();
+    if (status.available) return t("provider_ready");
+    return t(`piper_reason_${status.reason || "disabled"}`) || status.reason || "";
+  }
+  if (provider === "elevenlabs") {
+    return state.elevenConfigured ? t("provider_ready") : t("eleven_missing");
+  }
+  return t("provider_ready");
+}
+
+function renderProviderStatus() {
+  els.providerStatus.innerHTML = "";
+  const line = selectedLine();
+  const list = [
+    { id: "edge", label: "Edge TTS" },
+    { id: "elevenlabs", label: "ElevenLabs" },
+    { id: "piper", label: "Piper" }
+  ];
+  list.forEach(provider => {
+    const available = providerAvailable(provider.id);
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = `provider-chip ${available ? "ok" : "bad"} ${(line.provider || "edge") === provider.id ? "active" : ""}`;
+    chip.disabled = !available;
+    chip.innerHTML = `<strong>${provider.label}</strong><span>${providerReasonText(provider.id)}</span>`;
+    chip.addEventListener("click", () => {
+      line.provider = provider.id;
+      render();
+    });
+    els.providerStatus.appendChild(chip);
+  });
+  Array.from(els.providerSelect.options).forEach(option => {
+    option.disabled = !providerAvailable(option.value);
+  });
+  if (!providerAvailable(line.provider || "edge")) {
+    line.provider = "edge";
+  }
+  els.providerSelect.value = line.provider || "edge";
 }
 
 function applyI18n() {
@@ -429,6 +498,29 @@ function renderVoices() {
   els.providerSelect.value = line.provider;
   els.elevenModelSelect.value = line.elevenModel;
 
+  const elevenMode = line.provider === "elevenlabs";
+  if (line.provider === "piper") {
+    const prefix = line.lang === "ru" ? "ru_" : "en_";
+    const voices = state.piperVoices.filter(voice => voice.startsWith(prefix));
+    els.voiceSelect.innerHTML = "";
+    voices.forEach(voice => {
+      const option = document.createElement("option");
+      option.value = voice;
+      option.textContent = voice;
+      els.voiceSelect.appendChild(option);
+    });
+    if (!voices.includes(line.voice) && voices[0]) {
+      line.voice = voices[0];
+    }
+    els.voiceSelect.value = line.voice;
+    els.voiceSelect.disabled = false;
+    els.elevenVoiceSelect.disabled = true;
+    els.elevenModelSelect.disabled = true;
+    els.rateInput.disabled = true;
+    els.pitchInput.disabled = true;
+    return;
+  }
+
   const voices = state.voices.filter(v => v.lang === line.lang);
   els.voiceSelect.innerHTML = "";
   voices.forEach(voice => {
@@ -461,7 +553,6 @@ function renderVoices() {
   }
   els.elevenVoiceSelect.value = line.elevenVoiceId || "";
 
-  const elevenMode = line.provider === "elevenlabs";
   els.voiceSelect.disabled = elevenMode;
   els.elevenVoiceSelect.disabled = !elevenMode || !state.elevenVoices.length;
   els.elevenModelSelect.disabled = !elevenMode;
@@ -585,6 +676,7 @@ function renderResults() {
 function render() {
   applyI18n();
   renderLines();
+  renderProviderStatus();
   renderEditor();
   renderRoles();
   renderPresets();
@@ -638,6 +730,22 @@ function payloadFromLine(line) {
     sampleRate: Number(els.sampleRate.value || 22050),
     timestamp: true
   };
+}
+
+async function loadTTSProviders() {
+  try {
+    const response = await fetch("/api/tts/providers");
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || "TTS providers failed");
+    state.ttsProviders = data;
+    state.piperVoices = data.providers?.piper?.voices || [];
+    render();
+  } catch (error) {
+    state.ttsProviders = null;
+    state.piperVoices = [];
+    setStatus(error.message, false);
+    render();
+  }
 }
 
 async function loadElevenStatus() {
@@ -794,6 +902,7 @@ function bind() {
   els.idInput = $("idInput");
   els.textInput = $("textInput");
   els.providerSelect = $("providerSelect");
+  els.providerStatus = $("providerStatus");
   els.voiceSelect = $("voiceSelect");
   els.elevenVoiceSelect = $("elevenVoiceSelect");
   els.elevenModelSelect = $("elevenModelSelect");
@@ -945,6 +1054,7 @@ async function boot() {
   state.voices = voicesData.voices;
   state.roles = voicesData.roles;
   state.presets = presetData.presets;
+  await loadTTSProviders();
   await loadElevenStatus();
   await loadLibrary();
   render();
