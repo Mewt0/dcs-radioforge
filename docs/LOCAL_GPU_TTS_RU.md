@@ -24,6 +24,15 @@ coqui TTS не работает на Python 3.14). Поэтому DCS RadioForge
 предупредит и запустит студию с Edge TTS. Голос по умолчанию — intro из
 `outputs\youtube_voice_reference_2`; другой: `.\start_gpu.ps1 -SpeakerWav D:\path\ref.wav`.
 
+## Свои reference-голоса
+
+Положите `.wav`-файлы в папку `references/` в корне проекта (mono, 24 кГц,
+15-30 секунд, без шумов и клиппинга) — они появятся в выпадающем списке голосов
+у провайдера **Local GPU** после перезапуска сервера. Дополнительные папки —
+через `RF_XTTS_VOICES_DIR` (несколько через `;`). Голос по умолчанию (когда
+в UI ничего не выбрано) — `RF_XTTS_SPEAKER_WAV`. Файлы из `references/` не
+коммитятся.
+
 ## Контракт
 
 RadioForge запускает команду из `RF_EXTERNAL_TTS_COMMAND` и подаёт JSON на stdin:

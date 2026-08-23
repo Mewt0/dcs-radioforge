@@ -291,6 +291,7 @@ def json_response(handler: BaseHTTPRequestHandler, payload: object, status: int 
     raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
     handler.send_header("Content-Length", str(len(raw)))
     handler.end_headers()
     handler.wfile.write(raw)
@@ -300,6 +301,7 @@ def text_response(handler: BaseHTTPRequestHandler, text: str, status: int = 200)
     raw = text.encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "text/plain; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
     handler.send_header("Content-Length", str(len(raw)))
     handler.end_headers()
     handler.wfile.write(raw)
@@ -817,6 +819,32 @@ def aggregate_elevenlabs_usage(results: list[dict]) -> dict:
     }
 
 
+def list_reference_voices() -> list[dict]:
+    """Scan configured folders for reference voices (wav files for the XTTS worker)."""
+    dirs: list[Path] = []
+    project_refs = APP_ROOT / "references"
+    if project_refs.is_dir():
+        dirs.append(project_refs)
+    extra = (os.environ.get("RF_XTTS_VOICES_DIR") or "").strip()
+    if extra and Path(extra).is_dir():
+        dirs.append(Path(extra))
+    voices: list[dict] = []
+    seen: set[str] = set()
+    for directory in dirs:
+        for path in sorted(directory.glob("*.wav")):
+            key = str(path.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            voices.append({"name": path.stem, "path": key, "size": path.stat().st_size})
+    speaker = (os.environ.get("RF_XTTS_SPEAKER_WAV") or "").strip()
+    if speaker and Path(speaker).exists():
+        key = str(Path(speaker).resolve())
+        if key not in seen:
+            voices.insert(0, {"name": Path(speaker).stem, "path": key, "size": Path(speaker).stat().st_size})
+    return voices
+
+
 def tts_providers_status() -> dict:
     """Report TTS provider availability for the UI (edge/elevenlabs/piper/xtts/external)."""
     tts.sync_provider_registrations()
@@ -973,6 +1001,10 @@ class Handler(BaseHTTPRequestHandler):
             load_local_env()
             json_response(self, tts_providers_status())
             return
+        if path == "/api/tts/references":
+            load_local_env()
+            json_response(self, {"voices": list_reference_voices()})
+            return
         if path == "/api/voices":
             json_response(self, {"voices": VOICE_CATALOG, "roles": ROLE_PRESETS})
             return
@@ -1086,6 +1118,7 @@ class Handler(BaseHTTPRequestHandler):
             raw = resolved.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
             self.wfile.write(raw)

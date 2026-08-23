@@ -95,6 +95,8 @@ class WorkerImportTest(unittest.TestCase):
             other.write_bytes(b"wav")
             with mock.patch.dict(os.environ, {"RF_XTTS_SPEAKER_WAV": str(ref)}):
                 self.assertEqual(mod.resolve_speaker_wav({}), str(ref))
+            with mock.patch.dict(os.environ, {"RF_XTTS_SPEAKER_WAV": str(ref)}):
+                self.assertEqual(mod.resolve_speaker_wav({"voice": str(other)}), str(other))
             with mock.patch.dict(os.environ, {"RF_XTTS_SPEAKER_WAV": ""}):
                 self.assertEqual(mod.resolve_speaker_wav({"voice": str(other)}), str(other))
                 with self.assertRaisesRegex(ValueError, "no speaker reference"):

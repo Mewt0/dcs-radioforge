@@ -22,3 +22,6 @@ release/
 .venv-xtts/
 ffmpeg-shared/
 piper-models/
+
+# Local reference voices (user-provided wav files for the XTTS worker)
+references/*.wav

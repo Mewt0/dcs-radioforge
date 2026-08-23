@@ -80,6 +80,7 @@ const i18n = {
     xtts_action_speaker: "Задайте RF_XTTS_SPEAKER_WAV (путь к референсному wav)",
     xtts_action_cuda: "Установите CUDA-версию torch или RF_XTTS_DEVICE=cpu",
     external_free: "Local GPU: бесплатно (offline)",
+    no_reference_voices: "Нет reference-голосов — положите .wav в references/",
     external_voice: "Голос Local GPU (из конфига)",
     external_reason_disabled: "не включён (RF_EXTERNAL_TTS_ENABLED)",
     external_reason_command_missing: "не задана команда (RF_EXTERNAL_TTS_COMMAND)",
@@ -212,6 +213,7 @@ const i18n = {
     xtts_action_speaker: "Set RF_XTTS_SPEAKER_WAV (path to a reference wav)",
     xtts_action_cuda: "Install CUDA torch or set RF_XTTS_DEVICE=cpu",
     external_free: "Local GPU: free (offline)",
+    no_reference_voices: "No reference voices — put .wav into references/",
     external_voice: "Local GPU voice (from config)",
     external_reason_disabled: "not enabled (RF_EXTERNAL_TTS_ENABLED)",
     external_reason_command_missing: "RF_EXTERNAL_TTS_COMMAND not set",
@@ -264,6 +266,7 @@ const state = {
   lastElevenUsage: null,
   ttsProviders: null,
   piperVoices: [],
+  referenceVoices: [],
   voicePreviews: [],
   roles: [],
   presets: {},
@@ -675,13 +678,27 @@ function renderVoices() {
 
   if (line.provider === "external") {
     els.voiceSelect.innerHTML = "";
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = externalStatus().voice_label || t("external_voice");
-    els.voiceSelect.appendChild(option);
-    els.voiceSelect.value = "";
-    line.voice = "";
-    els.voiceSelect.disabled = true;
+    const voices = state.referenceVoices;
+    if (!voices.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = t("no_reference_voices");
+      els.voiceSelect.appendChild(option);
+      els.voiceSelect.value = "";
+      line.voice = "";
+    } else {
+      voices.forEach(ref => {
+        const option = document.createElement("option");
+        option.value = ref.path;
+        option.textContent = ref.name;
+        els.voiceSelect.appendChild(option);
+      });
+      if (!voices.some(ref => ref.path === line.voice) && voices[0]) {
+        line.voice = voices[0].path;
+      }
+      els.voiceSelect.value = line.voice;
+    }
+    els.voiceSelect.disabled = false;
     els.elevenVoiceSelect.disabled = true;
     els.elevenModelSelect.disabled = true;
     els.rateInput.disabled = true;
@@ -924,6 +941,18 @@ async function loadTTSProviders() {
   }
 }
 
+async function loadReferences() {
+  try {
+    const response = await fetch("/api/tts/references");
+    const data = await response.json();
+    state.referenceVoices = data.voices || [];
+  } catch (error) {
+    state.referenceVoices = [];
+    console.error(error);
+  }
+  render();
+}
+
 async function loadElevenStatus() {
   const response = await fetch("/api/elevenlabs/status");
   const data = await response.json();
@@ -1122,6 +1151,7 @@ function bind() {
   els.speakerInput = $("speakerInput");
   els.idInput = $("idInput");
   els.textInput = $("textInput");
+  els.charCount = $("charCount");
   els.providerSelect = $("providerSelect");
   els.providerStatus = $("providerStatus");
   els.voiceSelect = $("voiceSelect");
@@ -1279,6 +1309,7 @@ async function boot() {
   state.roles = voicesData.roles;
   state.presets = presetData.presets;
   await loadTTSProviders();
+  await loadReferences();
   await loadElevenStatus();
   await loadLibrary();
   render();

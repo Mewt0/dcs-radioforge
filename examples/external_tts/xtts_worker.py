@@ -39,15 +39,15 @@ def read_job() -> dict:
 
 
 def resolve_speaker_wav(job: dict) -> str:
-    """Speaker reference: env RF_XTTS_SPEAKER_WAV, else payload.voice if it is a path."""
-    env_wav = (os.environ.get("RF_XTTS_SPEAKER_WAV") or "").strip()
+    """Speaker reference: payload.voice if it is an existing path, else env RF_XTTS_SPEAKER_WAV."""
     voice = (job.get("voice") or "").strip()
+    if voice and Path(voice).exists():
+        return voice
+    env_wav = (os.environ.get("RF_XTTS_SPEAKER_WAV") or "").strip()
     if env_wav:
         if not Path(env_wav).exists():
             raise ValueError(f"RF_XTTS_SPEAKER_WAV does not exist: {env_wav}")
         return env_wav
-    if voice and Path(voice).exists():
-        return voice
     raise ValueError("no speaker reference: set RF_XTTS_SPEAKER_WAV or pass voice=<path to wav>")
 
 
