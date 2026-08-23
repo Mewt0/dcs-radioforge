@@ -81,8 +81,8 @@ const i18n = {
     external_voice: "Голос Local GPU (из конфига)",
     external_reason_disabled: "не включён (RF_EXTERNAL_TTS_ENABLED)",
     external_reason_command_missing: "не задана команда (RF_EXTERNAL_TTS_COMMAND)",
-    external_action_enable: "Включите RF_EXTERNAL_TTS_ENABLED=1 в .env",
-    external_action_command: "Задайте RF_EXTERNAL_TTS_COMMAND (путь к python.exe + скрипту)",
+    external_action_enable: "Включите RF_EXTERNAL_TTS_ENABLED=1 или запустите .\start_gpu.ps1",
+    external_action_command: "Задайте RF_EXTERNAL_TTS_COMMAND или запустите .\start_gpu.ps1",
     test_voice: "Проверить голос",
     preview_played: voice => `Проверка: ${voice}`,
     preview_timeout: "Проверка голоса превысила лимит времени (таймаут).",
@@ -211,8 +211,8 @@ const i18n = {
     external_voice: "Local GPU voice (from config)",
     external_reason_disabled: "not enabled (RF_EXTERNAL_TTS_ENABLED)",
     external_reason_command_missing: "RF_EXTERNAL_TTS_COMMAND not set",
-    external_action_enable: "Enable RF_EXTERNAL_TTS_ENABLED=1 in .env",
-    external_action_command: "Set RF_EXTERNAL_TTS_COMMAND (python.exe + script path)",
+    external_action_enable: "Enable RF_EXTERNAL_TTS_ENABLED=1 or run .\start_gpu.ps1",
+    external_action_command: "Set RF_EXTERNAL_TTS_COMMAND or run .\start_gpu.ps1",
     test_voice: "Test voice",
     preview_played: voice => `Tested: ${voice}`,
     preview_timeout: "Voice test timed out.",
@@ -469,7 +469,7 @@ function providerReasonText(provider) {
   }
   if (provider === "external") {
     const status = externalStatus();
-    if (status.available) return t("provider_ready");
+    if (status.available) return status.voice_label || t("provider_ready");
     return t(`external_reason_${status.reason || "disabled"}`) || status.reason || "";
   }
   if (provider === "elevenlabs") {
@@ -506,7 +506,6 @@ function renderProviderStatus() {
     { id: "edge", label: "Edge TTS" },
     { id: "elevenlabs", label: "ElevenLabs" },
     { id: "piper", label: "Piper" },
-    { id: "xtts", label: "XTTS (GPU)" },
     { id: "external", label: "Local GPU" }
   ];
   list.forEach(provider => {
@@ -518,11 +517,9 @@ function renderProviderStatus() {
     const action = !available
       ? provider.id === "piper"
         ? piperActionText(piperStatus().reason)
-        : provider.id === "xtts"
-          ? xttsActionText(xttsStatus().reason)
-          : provider.id === "external"
-            ? externalActionText(externalStatus().reason)
-            : ""
+        : provider.id === "external"
+          ? externalActionText(externalStatus().reason)
+          : ""
       : "";
     chip.innerHTML = `<strong>${provider.label}</strong><span>${providerReasonText(provider.id)}</span>${action ? `<small>${action}</small>` : ""}`;
     chip.addEventListener("click", () => {
