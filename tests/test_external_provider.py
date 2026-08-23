@@ -142,8 +142,21 @@ class ExternalAvailableTest(unittest.TestCase):
         command = self._command("ok.py")
         original_tmp = server.TMP
         server.TMP = self.tmp / "build" / "_tmp_mp3"
+
+        def fake_run_ffmpeg(args: list[str]) -> None:
+            src = args[args.index("-i") + 1]
+            dst = args[-1]
+            Path(dst).write_bytes(Path(src).read_bytes())
+
+        def fake_loudnorm_params(path: Path) -> dict:
+            return {"input_i": "-36.0", "input_tp": "-27.9", "input_lra": "1.2", "input_thresh": "-46.5"}
+
         try:
-            with mock.patch.dict(os.environ, _env(command)):
+            with (
+                mock.patch.dict(os.environ, _env(command)),
+                mock.patch.object(server, "run_ffmpeg", side_effect=fake_run_ffmpeg),
+                mock.patch.object(server, "loudnorm_params", side_effect=fake_loudnorm_params),
+            ):
                 result = server.tts_preview({"provider": "external", "text": "привет"})
         finally:
             server.TMP = original_tmp

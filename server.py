@@ -6,6 +6,7 @@ import csv
 import json
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -612,6 +613,58 @@ def clamp(value: float, low: float, high: float) -> int | float:
     return max(low, min(high, value))
 
 
+def loudness_target() -> str:
+    """Target integrated loudness (LUFS) for generated audio. Default matches the
+    reference lesson loudness (~-9 LUFS); override with RF_TTS_LOUDNESS_TARGET."""
+    return (os.environ.get("RF_TTS_LOUDNESS_TARGET") or "-9").strip() or "-9"
+
+
+_CREST_FILTERS = (
+    "acompressor=threshold=-20dB:ratio=20:attack=0.05:release=30,"
+    "acompressor=threshold=-30dB:ratio=20:attack=0.05:release=30"
+)
+
+
+def loudnorm_params(path: Path) -> dict:
+    """Measure EBU R128 loudness of a file via ffmpeg (for a two-pass loudnorm)."""
+    result = subprocess.run(
+        [
+            ffmpeg(),
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            str(path),
+            "-af",
+            f"loudnorm=I={loudness_target()}:TP=-1.5:LRA=11:print_format=json",
+            "-f",
+            "null",
+            "-",
+        ],
+        capture_output=True,
+        text=True,
+        errors="replace",
+        check=False,
+    )
+    text = (result.stdout or "") + (result.stderr or "")
+    params: dict = {}
+    for key in ("input_i", "input_tp", "input_lra", "input_thresh"):
+        match = re.search(rf'"{key}"\s*:\s*"?(-?[\d.]+)"?', text)
+        if match:
+            params[key] = match.group(1)
+    return params
+
+
+def loudnorm_apply_filter(params: dict) -> str:
+    """Two-pass loudnorm filter string using previously measured loudness params."""
+    base = f"loudnorm=I={loudness_target()}:TP=-1.5:LRA=11"
+    if not params.get("input_i"):
+        return f"{base}:linear=false"
+    return (
+        f"{base}:measured_I={params['input_i']}:measured_TP={params['input_tp']}:"
+        f"measured_LRA={params['input_lra']}:measured_thresh={params['input_thresh']}:linear=false"
+    )
+
+
 def convert_audio(
     src: Path,
     dst: Path,
@@ -624,10 +677,11 @@ def convert_audio(
     preset = RADIO_PRESETS.get(preset_id, RADIO_PRESETS["srs_cockpit"])
     quality = int(clamp(signal_quality, 15, 100))
     weakness = (100 - quality) / 100.0
+    preset_filters = [f for f in preset["filters"] if not f.startswith("loudnorm")]
     base_filters = [
         "aformat=channel_layouts=mono",
         f"aresample={sample_rate}",
-        *preset["filters"],
+        *preset_filters,
     ]
     if weakness > 0.18:
         depth = min(0.22, weakness * 0.20)
@@ -642,7 +696,9 @@ def convert_audio(
     if noise > 0:
         graph_parts.append(f"[0:a]{filters}[base]")
         graph_parts.append(f"anoisesrc=color=white:amplitude={noise:.5f}:sample_rate={sample_rate}[noise]")
-        graph_parts.append("[base][noise]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[voice]")
+        graph_parts.append(
+            "[base][noise]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[voice]"
+        )
     else:
         graph_parts.append(f"[0:a]{filters}[voice]")
 
@@ -676,11 +732,30 @@ def convert_audio(
         concat_labels.append("[tail]")
 
     if len(concat_labels) > 1:
-        graph_parts.append(f"{''.join(concat_labels)}concat=n={len(concat_labels)}:v=0:a=1[out]")
+        graph_parts.append(f"{''.join(concat_labels)}concat=n={len(concat_labels)}:v=0:a=1,{_CREST_FILTERS}[out]")
     else:
-        graph_parts.append("[voice]anull[out]")
+        graph_parts.append(f"[voice]anull,{_CREST_FILTERS}[out]")
 
-    run_ffmpeg(["-i", str(src), "-vn", "-filter_complex", ";".join(graph_parts), "-map", "[out]", *codec, str(dst)])
+    staged = TMP / f"{dst.stem}_stage.wav"
+    run_ffmpeg(
+        [
+            "-i",
+            str(src),
+            "-vn",
+            "-filter_complex",
+            ";".join(graph_parts),
+            "-map",
+            "[out]",
+            "-c:a",
+            "pcm_s16le",
+            str(staged),
+        ]
+    )
+    try:
+        params = loudnorm_params(staged)
+        run_ffmpeg(["-i", str(staged), "-af", loudnorm_apply_filter(params), "-ar", str(sample_rate), *codec, str(dst)])
+    finally:
+        staged.unlink(missing_ok=True)
 
 
 def wav_duration(path: Path) -> float | None:
@@ -952,18 +1027,49 @@ def tts_preview(payload: dict) -> dict:
     item: dict = {"provider": provider, "voice": voice, "text": text}
     if provider == "elevenlabs":
         item["elevenVoiceId"] = voice
+    staged = TMP / f"preview_{uuid.uuid4().hex[:8]}_stage.wav"
+    norm_target = TMP / f"preview_{uuid.uuid4().hex[:8]}_norm.wav"
     try:
         _, voice_label = tts.synthesize_item(item, target)
-        audio = target.read_bytes()
+        run_ffmpeg(
+            [
+                "-i",
+                str(target),
+                "-af",
+                f"aformat=channel_layouts=mono,{_CREST_FILTERS}",
+                "-ar",
+                "24000",
+                "-c:a",
+                "pcm_s16le",
+                str(staged),
+            ]
+        )
+        params = loudnorm_params(staged)
+        run_ffmpeg(
+            [
+                "-i",
+                str(staged),
+                "-af",
+                loudnorm_apply_filter(params),
+                "-ar",
+                "24000",
+                "-c:a",
+                "pcm_s16le",
+                str(norm_target),
+            ]
+        )
+        audio = norm_target.read_bytes()
     except tts.ExternalTTSError as exc:
         raise PreviewError(str(exc), f"external_{exc.code}") from exc
     finally:
         target.unlink(missing_ok=True)
+        staged.unlink(missing_ok=True)
+        norm_target.unlink(missing_ok=True)
     return {
         "provider": provider,
         "voice": voice_label,
-        "mime": "audio/mpeg" if ext == "mp3" else "audio/wav",
-        "format": ext,
+        "mime": "audio/wav",
+        "format": "wav",
         "characters": len(text),
         "audio_base64": base64.b64encode(audio).decode("ascii"),
     }
