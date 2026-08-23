@@ -283,7 +283,10 @@ def external_provider(item: dict, target: Path) -> dict | None:
         raise ExternalTTSError(f"External TTS command timed out after {status['timeout']}s", "timeout") from None
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
-        detail = stderr or "no output"
+        lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+        detail = lines[-1] if lines else "no output"
+        if len(detail) > 300:
+            detail = detail[:300] + "..."
         raise ExternalTTSError(f"External TTS command failed (exit {proc.returncode}): {detail}", "command_failed")
     if not target.exists():
         raise ExternalTTSError("External TTS command did not write the output wav", "command_failed")

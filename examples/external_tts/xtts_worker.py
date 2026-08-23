@@ -91,7 +91,8 @@ def main() -> int:
         synthesize(job, speaker_wav, resolve_model(), resolve_device())
         return 0
     except Exception as exc:  # noqa: BLE001 - worker must report and exit non-zero
-        print(f"xtts_worker error: {exc}", file=sys.stderr)
+        message = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+        print(f"xtts_worker error: {type(exc).__name__}: {message[:300]}", file=sys.stderr)
         return 1
 
 

@@ -85,6 +85,8 @@ const i18n = {
     external_action_command: "Задайте RF_EXTERNAL_TTS_COMMAND (путь к python.exe + скрипту)",
     test_voice: "Проверить голос",
     preview_played: voice => `Проверка: ${voice}`,
+    preview_timeout: "Проверка голоса превысила лимит времени (таймаут).",
+    preview_error: msg => `Ошибка: ${msg}`,
     voice_role_names: {
       ru_darkstar: "RU командир",
       ru_raven: "RU ударная группа",
@@ -213,6 +215,8 @@ const i18n = {
     external_action_command: "Set RF_EXTERNAL_TTS_COMMAND (python.exe + script path)",
     test_voice: "Test voice",
     preview_played: voice => `Tested: ${voice}`,
+    preview_timeout: "Voice test timed out.",
+    preview_error: msg => `Error: ${msg}`,
     voice_role_names: {
       ru_darkstar: "RU command",
       ru_raven: "RU strike",
@@ -991,12 +995,20 @@ async function saveDesignedVoice(preview) {
 async function testVoice() {
   saveEditor();
   const line = selectedLine();
+  if (!line.text || !line.text.trim()) {
+    setStatus(t("no_text"), false);
+    return;
+  }
   document.body.classList.add("busy");
+  setStatus(t("status_generating"), true);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 330000);
   try {
     const response = await fetch("/api/tts/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: line.provider || "edge", voice: line.voice || "", text: line.text || "" })
+      body: JSON.stringify({ provider: line.provider || "edge", voice: line.voice || "", text: line.text || "" }),
+      signal: controller.signal
     });
     const data = await response.json();
     if (!data.ok) {
@@ -1004,7 +1016,8 @@ async function testVoice() {
       if (data.code?.startsWith("piper_")) action = piperActionText(data.code.slice(6));
       if (data.code?.startsWith("xtts_")) action = xttsActionText(data.code.slice(5));
       if (data.code?.startsWith("external_")) action = externalActionText(data.code.slice(9));
-      throw new Error(action ? data.error + " \u2014 " + action : data.error);
+      const detail = action ? data.error + " \u2014 " + action : data.error;
+      throw new Error(String(detail || "Unknown error"));
     }
     const bytes = Uint8Array.from(atob(data.audio_base64), char => char.charCodeAt(0));
     const audio = new Audio(URL.createObjectURL(new Blob([bytes], { type: data.mime })));
@@ -1012,8 +1025,12 @@ async function testVoice() {
     setStatus(t("preview_played", data.voice), true);
   } catch (error) {
     console.error(error);
-    setStatus(error.message, false);
+    const message = error.name === "AbortError"
+      ? t("preview_timeout")
+      : t("preview_error", String(error.message || error).slice(0, 220));
+    setStatus(message, false);
   } finally {
+    clearTimeout(timer);
     document.body.classList.remove("busy");
   }
 }
