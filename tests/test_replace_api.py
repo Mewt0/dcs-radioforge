@@ -24,12 +24,15 @@ class ReplaceApiTest(unittest.TestCase):
         self.tmp = Path(self._tmp.name)
         self._orig_tmp = server.TMP
         self._orig_backup = server.BACKUP_DIR
+        self._orig_ready = server.READY
         server.TMP = self.tmp / "build" / "_tmp_mp3"
         server.BACKUP_DIR = self.tmp / "build" / "rf_backup"
+        server.READY = self.tmp / "build" / "dcs-ready"
 
     def tearDown(self) -> None:
         server.TMP = self._orig_tmp
         server.BACKUP_DIR = self._orig_backup
+        server.READY = self._orig_ready
         self._tmp.cleanup()
 
     def _make_target(self, name: str = "voice_line.ogg", data: bytes = b"OLD-AUDIO") -> Path:
@@ -165,6 +168,45 @@ class ReplaceApiTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "external_command_failed")
         # target untouched, backup still created
         self.assertEqual(target.read_bytes(), b"OLD-AUDIO")
+        self.assertEqual(len(list(server.BACKUP_DIR.glob("*.bak"))), 1)
+
+    def test_synthesize_ok(self) -> None:
+        self._patch_synth()
+        self._patch_convert()
+        with (
+            mock.patch.object(server, "run_ffmpeg", side_effect=_fake_run_ffmpeg),
+            mock.patch.object(
+                server, "probe_audio", return_value={"codec": "vorbis", "sample_rate": 22050, "channels": 1}
+            ),
+        ):
+            result = server.synthesize_audio({"text": "привет", "fileName": "draft_test"})
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["url"].startswith("/files/"))
+        self.assertEqual(result["format"], "ogg")
+        path = Path(result["path"])
+        self.assertTrue(path.exists())
+        self.assertEqual(path.read_bytes(), b"CONV-ogg")
+
+    def test_synthesize_requires_text(self) -> None:
+        with self.assertRaises(server.ReplaceError) as ctx:
+            server.synthesize_audio({"text": "  "})
+        self.assertEqual(ctx.exception.code, "missing_fields")
+
+    def test_replace_with_source_skips_synthesis(self) -> None:
+        target = self._make_target("voice.ogg")
+        draft = self.tmp / "draft.ogg"
+        draft.write_bytes(b"DRAFT-AUDIO")
+        self._patch_convert()
+        with (
+            mock.patch.object(server, "run_ffmpeg", side_effect=_fake_run_ffmpeg),
+            mock.patch.object(
+                server, "probe_audio", return_value={"codec": "vorbis", "sample_rate": 22050, "channels": 1}
+            ),
+        ):
+            result = server.replace_audio({"path": str(target), "text": "привет", "source": str(draft)})
+        self.assertTrue(result["ok"])
+        # fake convert writes CONV-ogg; source was not synthesized (no tts mock -> would fail if called)
+        self.assertEqual(target.read_bytes(), b"CONV-ogg")
         self.assertEqual(len(list(server.BACKUP_DIR.glob("*.bak"))), 1)
 
 

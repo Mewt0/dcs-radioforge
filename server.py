@@ -1135,19 +1135,59 @@ def _format_codec(fmt: str) -> list[str]:
     return ["-c:a", "pcm_s16le"]
 
 
+def _synth_source(payload: dict, basename: str) -> tuple[Path, str]:
+    """Synthesize a voice-over source file; returns (source_path, voice_label)."""
+    provider = (payload.get("provider") or "external").strip() or "external"
+    voice = (payload.get("voice") or "").strip()
+    text = (payload.get("text") or "").strip()
+    source = TMP / f"{basename}.{tts.provider_source_format(provider)}"
+    item: dict = {"provider": provider, "text": text}
+    if voice:
+        item["voice"] = voice
+    _, voice_label = tts.synthesize_item(item, source)
+    return source, voice_label
+
+
+def _convert_voiceover(
+    source: Path,
+    basename: str,
+    fmt: str,
+    sample_rate: int,
+    channels: int,
+    preset_id: str,
+    signal_quality: int,
+    mic_clicks: bool,
+) -> Path:
+    """Convert a synthesized source to the target format/rate/channels (radio preset applied)."""
+    if fmt in {"wav", "ogg"}:
+        converted = TMP / f"{basename}.{fmt}"
+        convert_audio(source, converted, fmt, sample_rate, preset_id, signal_quality, mic_clicks)
+    else:  # mp3: convert via wav stage
+        staged_wav = TMP / f"{basename}_conv.wav"
+        convert_audio(source, staged_wav, "wav", sample_rate, preset_id, signal_quality, mic_clicks)
+        converted = TMP / f"{basename}.mp3"
+        run_ffmpeg(["-i", str(staged_wav), *_format_codec("mp3"), str(converted)])
+        staged_wav.unlink(missing_ok=True)
+    if channels == 2:
+        stereo = TMP / f"{basename}_stereo.{fmt}"
+        run_ffmpeg(["-i", str(converted), "-af", "aformat=channel_layouts=stereo", *_format_codec(fmt), str(stereo)])
+        converted.unlink(missing_ok=True)
+        converted = stereo
+    return converted
+
+
 def replace_audio(payload: dict) -> dict:
     """Voice-over a text line and replace an existing audio file in place.
 
     The server is the single owner of the replacement: it probes the original
-    format/sample rate, backs it up, synthesizes the text with the chosen
-    provider, applies the radio preset, converts strictly to the original
-    format, and atomically swaps the file via os.replace. The file name and
-    mapResource keys stay untouched (DCS-safe).
+    format/sample rate, backs it up, synthesizes the text (or reuses a ready
+    file passed as "source"), applies the radio preset, converts strictly to
+    the original format, and atomically swaps the file via os.replace. The
+    file name and mapResource keys stay untouched (DCS-safe).
     """
     raw_path = (payload.get("path") or "").strip()
-    text = (payload.get("text") or "").strip()
-    if not raw_path or not text:
-        raise ReplaceError("path and text are required", "missing_fields")
+    if not raw_path:
+        raise ReplaceError("path is required", "missing_fields")
     target = Path(raw_path)
     if not target.exists() or not target.is_file():
         raise ReplaceError(f"Audio file not found: {target}", "file_not_found")
@@ -1159,11 +1199,9 @@ def replace_audio(payload: dict) -> dict:
     sample_rate = int(probe.get("sample_rate") or 24000)
     channels = int(probe.get("channels") or 1)
     fmt = ext.lstrip(".")
-    provider = (payload.get("provider") or "external").strip() or "external"
     preset_id = payload.get("preset") or "srs_cockpit"
     signal_quality = int(payload.get("signalQuality") or 86)
     mic_clicks = bool(payload.get("micClicks", True))
-    voice = (payload.get("voice") or "").strip()
 
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -1172,32 +1210,20 @@ def replace_audio(payload: dict) -> dict:
 
     TMP.mkdir(parents=True, exist_ok=True)
     basename = f"replace_{uuid.uuid4().hex[:8]}"
-    source = TMP / f"{basename}.{tts.provider_source_format(provider)}"
+    source: Path | None = None
     converted: Path | None = None
     tmp_target: Path | None = None
     try:
-        item: dict = {"provider": provider, "text": text}
-        if voice:
-            item["voice"] = voice
-        _, voice_label = tts.synthesize_item(item, source)
+        ready_source = (payload.get("source") or "").strip()
+        if ready_source and Path(ready_source).exists() and Path(ready_source).is_file():
+            source = Path(ready_source)
+            voice_label = "RadioForge draft"
+        else:
+            source, voice_label = _synth_source(payload, basename)
 
-        if fmt in {"wav", "ogg"}:
-            converted = TMP / f"{basename}.{fmt}"
-            convert_audio(source, converted, fmt, sample_rate, preset_id, signal_quality, mic_clicks)
-        else:  # mp3: convert via wav stage
-            staged_wav = TMP / f"{basename}_conv.wav"
-            convert_audio(source, staged_wav, "wav", sample_rate, preset_id, signal_quality, mic_clicks)
-            converted = TMP / f"{basename}.mp3"
-            run_ffmpeg(["-i", str(staged_wav), *_format_codec("mp3"), str(converted)])
-            staged_wav.unlink(missing_ok=True)
-
-        if channels == 2:
-            stereo = TMP / f"{basename}_stereo.{fmt}"
-            run_ffmpeg(
-                ["-i", str(converted), "-af", "aformat=channel_layouts=stereo", *_format_codec(fmt), str(stereo)]
-            )
-            converted.unlink(missing_ok=True)
-            converted = stereo
+        converted = _convert_voiceover(
+            source, basename, fmt, sample_rate, channels, preset_id, signal_quality, mic_clicks
+        )
 
         tmp_target = target.with_name(f".{target.name}.tmp{uuid.uuid4().hex[:6]}")
         shutil.copy2(converted, tmp_target)
@@ -1220,9 +1246,58 @@ def replace_audio(payload: dict) -> dict:
     finally:
         if tmp_target is not None:
             tmp_target.unlink(missing_ok=True)
-        source.unlink(missing_ok=True)
         if converted is not None:
             converted.unlink(missing_ok=True)
+        if source is not None and source.parent == TMP:
+            source.unlink(missing_ok=True)
+
+
+def synthesize_audio(payload: dict) -> dict:
+    """Synthesize a voice-over draft file into build/dcs-ready (no replacement).
+
+    Returns {ok, path, url, format, sample_rate, duration, voice} so the client
+    can listen first and later apply it via /api/replace with "source".
+    """
+    text = (payload.get("text") or "").strip()
+    if not text:
+        raise ReplaceError("text is required", "missing_fields")
+    preset_id = payload.get("preset") or "srs_cockpit"
+    signal_quality = int(payload.get("signalQuality") or 86)
+    mic_clicks = bool(payload.get("micClicks", True))
+    sample_rate = int(payload.get("sampleRate") or 22050)
+    fmt = (payload.get("format") or "ogg").strip().lower()
+    if fmt not in {"ogg", "wav", "mp3"}:
+        fmt = "ogg"
+    file_name = safe_id((payload.get("fileName") or "").strip() or "voiceover", "voiceover")
+
+    READY.mkdir(parents=True, exist_ok=True)
+    TMP.mkdir(parents=True, exist_ok=True)
+    basename = f"{file_name}_{time.strftime('%Y%m%d-%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    source: Path | None = None
+    converted: Path | None = None
+    try:
+        source, voice_label = _synth_source(payload, basename)
+        converted = _convert_voiceover(source, basename, fmt, sample_rate, 1, preset_id, signal_quality, mic_clicks)
+        target = READY / f"{basename}.{fmt}"
+        os.replace(converted, target)
+        converted = None
+        duration = wav_duration(target) if fmt == "wav" else None
+        return {
+            "ok": True,
+            "path": str(target),
+            "url": f"/files/{target.name}",
+            "format": fmt,
+            "sample_rate": sample_rate,
+            "duration": duration,
+            "voice": voice_label,
+        }
+    except tts.ExternalTTSError as exc:
+        raise ReplaceError(str(exc), f"external_{exc.code}") from exc
+    finally:
+        if converted is not None:
+            converted.unlink(missing_ok=True)
+        if source is not None:
+            source.unlink(missing_ok=True)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1299,6 +1374,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/elevenlabs/create-voice",
             "/api/tts/preview",
             "/api/replace",
+            "/api/synthesize",
         }:
             text_response(self, "not found", 404)
             return
@@ -1334,6 +1410,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/replace":
                 json_response(self, replace_audio(payload))
+                return
+            if parsed.path == "/api/synthesize":
+                json_response(self, synthesize_audio(payload))
                 return
         except PreviewError as exc:
             json_response(self, {"ok": False, "error": str(exc), "code": exc.code}, 400)
