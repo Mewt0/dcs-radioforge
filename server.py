@@ -1252,6 +1252,24 @@ def replace_audio(payload: dict) -> dict:
             source.unlink(missing_ok=True)
 
 
+def restore_audio(payload: dict) -> dict:
+    """Restore a previously backed-up audio file into its original path."""
+    raw_path = (payload.get("path") or "").strip()
+    raw_backup = (payload.get("backup") or "").strip()
+    if not raw_path or not raw_backup:
+        raise ReplaceError("path and backup are required", "missing_fields")
+    target = Path(raw_path)
+    backup = Path(raw_backup)
+    if not target.exists() or not target.is_file():
+        raise ReplaceError(f"Audio file not found: {target}", "file_not_found")
+    if not backup.exists() or not backup.is_file():
+        raise ReplaceError(f"Backup not found: {backup}", "backup_not_found")
+    tmp = target.with_name(f".{target.name}.restore{uuid.uuid4().hex[:6]}")
+    shutil.copy2(backup, tmp)
+    os.replace(tmp, target)
+    return {"ok": True, "path": str(target), "restored": str(backup)}
+
+
 def synthesize_audio(payload: dict) -> dict:
     """Synthesize a voice-over draft file into build/dcs-ready (no replacement).
 
@@ -1386,6 +1404,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/elevenlabs/create-voice",
             "/api/tts/preview",
             "/api/replace",
+            "/api/replace/restore",
             "/api/synthesize",
         }:
             text_response(self, "not found", 404)
@@ -1425,6 +1444,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/synthesize":
                 json_response(self, synthesize_audio(payload))
+                return
+            if parsed.path == "/api/replace/restore":
+                json_response(self, restore_audio(payload))
                 return
         except PreviewError as exc:
             json_response(self, {"ok": False, "error": str(exc), "code": exc.code}, 400)

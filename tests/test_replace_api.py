@@ -192,6 +192,20 @@ class ReplaceApiTest(unittest.TestCase):
             server.synthesize_audio({"text": "  "})
         self.assertEqual(ctx.exception.code, "missing_fields")
 
+    def test_restore_ok(self) -> None:
+        target = self._make_target("voice.ogg", data=b"NEW-AUDIO")
+        backup = self.tmp / "voice_ogg_backup.bak"
+        backup.write_bytes(b"OLD-AUDIO")
+        result = server.restore_audio({"path": str(target), "backup": str(backup)})
+        self.assertTrue(result["ok"])
+        self.assertEqual(target.read_bytes(), b"OLD-AUDIO")
+
+    def test_restore_missing_backup(self) -> None:
+        target = self._make_target("voice.ogg")
+        with self.assertRaises(server.ReplaceError) as ctx:
+            server.restore_audio({"path": str(target), "backup": str(self.tmp / "nope.bak")})
+        self.assertEqual(ctx.exception.code, "backup_not_found")
+
     def test_synthesize_matches_original_format(self) -> None:
         target = self._make_target("voice.ogg")
         self._patch_synth()
