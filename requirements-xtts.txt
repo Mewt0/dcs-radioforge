@@ -1,7 +1,15 @@
 # Optional: high-quality local GPU TTS via Coqui XTTS v2 (torch + CUDA).
-# Install only if you want the xtts provider (large: torch + model ~2GB+):
-#   .venv\Scripts\pip install -r requirements-xtts.txt
-# For CUDA, install the matching torch wheel first, e.g.:
-#   .venv\Scripts\pip install torch --index-url https://download.pytorch.org/whl/cu121
-# Then configure RF_XTTS_ENABLED / RF_XTTS_DEVICE / RF_XTTS_SPEAKER_WAV in .env.
-TTS>=0.22.0
+# Install only if you want the xtts provider (large: torch + model ~2GB+).
+#
+# Windows recipe (Python 3.11 in a separate venv, see examples/external_tts/README_RU.md):
+#   1) CUDA torch + torchaudio FIRST (matching versions, from the pytorch index):
+#        pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126
+#   2) then this file:
+#        pip install -r requirements-xtts.txt
+#   3) torchcodec needs FFmpeg shared DLLs on PATH (Windows) and COQUI_TOS_AGREED=1.
+#
+# coqui-tts is the maintained fork (PyPI "TTS" 0.22 needs a C++ build on Windows and
+# caps at Python <3.12). transformers is pinned: 5.x removed isin_mps_friendly.
+coqui-tts==0.27.5
+transformers==4.57.6
+torchcodec==0.16.0

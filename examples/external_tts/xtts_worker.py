@@ -76,8 +76,12 @@ def synthesize(job: dict, speaker_wav: str, model_name: str, device: str) -> Non
     from TTS.api import TTS  # lazy heavy import
 
     language = job.get("language") or _detect_language(job["text"])
-    tts = TTS(model_name=model_name, device=device)
-    tts.tts_to_file(text=job["text"], speaker_wav=speaker_wav, language=language, file_path=job["output"])
+    try:
+        model = TTS(model_name=model_name, device=device)
+    except TypeError:
+        # coqui-tts fork (>=0.24) replaced the device= kwarg with gpu= in the constructor.
+        model = TTS(model_name=model_name, gpu=(device == "cuda"))
+    model.tts_to_file(text=job["text"], speaker_wav=speaker_wav, language=language, file_path=job["output"])
 
 
 def main() -> int:
