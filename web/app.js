@@ -67,6 +67,16 @@ const i18n = {
     piper_action_enable: "Включите RF_PIPER_ENABLED=1 в .env",
     piper_action_install: "Установите: pip install -r requirements-piper.txt",
     piper_action_models: "Скачайте модели: scripts\download_piper_models.ps1",
+    xtts_free: "XTTS: локально (GPU)",
+    xtts_voice: "Speaker XTTS (из конфига)",
+    xtts_reason_disabled: "не включён (RF_XTTS_ENABLED)",
+    xtts_reason_not_installed: "пакет XTTS не установлен",
+    xtts_reason_speaker_wav_missing: "не задан RF_XTTS_SPEAKER_WAV",
+    xtts_reason_cuda_not_available: "CUDA недоступна, CPU fallback выключен",
+    xtts_action_enable: "Включите RF_XTTS_ENABLED=1 в .env",
+    xtts_action_install: "Установите: pip install -r requirements-xtts.txt",
+    xtts_action_speaker: "Задайте RF_XTTS_SPEAKER_WAV (путь к референсному wav)",
+    xtts_action_cuda: "Установите CUDA-версию torch или RF_XTTS_DEVICE=cpu",
     test_voice: "Проверить голос",
     preview_played: voice => `Проверка: ${voice}`,
     voice_role_names: {
@@ -179,6 +189,16 @@ const i18n = {
     piper_action_enable: "Enable RF_PIPER_ENABLED=1 in .env",
     piper_action_install: "Install: pip install -r requirements-piper.txt",
     piper_action_models: "Download models: scripts\download_piper_models.ps1",
+    xtts_free: "XTTS: local (GPU)",
+    xtts_voice: "XTTS speaker (from config)",
+    xtts_reason_disabled: "not enabled (RF_XTTS_ENABLED)",
+    xtts_reason_not_installed: "XTTS package not installed",
+    xtts_reason_speaker_wav_missing: "RF_XTTS_SPEAKER_WAV not set",
+    xtts_reason_cuda_not_available: "CUDA not available, CPU fallback disabled",
+    xtts_action_enable: "Enable RF_XTTS_ENABLED=1 in .env",
+    xtts_action_install: "Install: pip install -r requirements-xtts.txt",
+    xtts_action_speaker: "Set RF_XTTS_SPEAKER_WAV (path to a reference wav)",
+    xtts_action_cuda: "Install CUDA torch or set RF_XTTS_DEVICE=cpu",
     test_voice: "Test voice",
     preview_played: voice => `Tested: ${voice}`,
     voice_role_names: {
@@ -352,6 +372,7 @@ function formatEstimate(estimate) {
   if (!estimate.active) {
     const provider = selectedLine()?.provider || "edge";
     if (provider === "piper") return t("piper_free");
+    if (provider === "xtts") return t("xtts_free");
     return t("eleven_edge_free");
   }
   if (!estimate.chars) return t("eleven_no_cost");
@@ -403,8 +424,13 @@ function piperStatus() {
   return state.ttsProviders?.providers?.piper || { available: false, reason: "disabled" };
 }
 
+function xttsStatus() {
+  return state.ttsProviders?.providers?.xtts || { available: false, reason: "disabled" };
+}
+
 function providerAvailable(provider) {
   if (provider === "piper") return Boolean(piperStatus().available);
+  if (provider === "xtts") return Boolean(xttsStatus().available);
   return true;
 }
 
@@ -413,6 +439,11 @@ function providerReasonText(provider) {
     const status = piperStatus();
     if (status.available) return t("provider_ready");
     return t(`piper_reason_${status.reason || "disabled"}`) || status.reason || "";
+  }
+  if (provider === "xtts") {
+    const status = xttsStatus();
+    if (status.available) return t("provider_ready");
+    return t(`xtts_reason_${status.reason || "disabled"}`) || status.reason || "";
   }
   if (provider === "elevenlabs") {
     return state.elevenConfigured ? t("provider_ready") : t("eleven_missing");
@@ -427,13 +458,22 @@ function piperActionText(reason) {
   return "";
 }
 
+function xttsActionText(reason) {
+  if (reason === "disabled") return t("xtts_action_enable");
+  if (reason === "not_installed") return t("xtts_action_install");
+  if (reason === "speaker_wav_missing") return t("xtts_action_speaker");
+  if (reason === "cuda_not_available") return t("xtts_action_cuda");
+  return "";
+}
+
 function renderProviderStatus() {
   els.providerStatus.innerHTML = "";
   const line = selectedLine();
   const list = [
     { id: "edge", label: "Edge TTS" },
     { id: "elevenlabs", label: "ElevenLabs" },
-    { id: "piper", label: "Piper" }
+    { id: "piper", label: "Piper" },
+    { id: "xtts", label: "XTTS (GPU)" }
   ];
   list.forEach(provider => {
     const available = providerAvailable(provider.id);
@@ -441,7 +481,13 @@ function renderProviderStatus() {
     chip.type = "button";
     chip.className = `provider-chip ${available ? "ok" : "bad"} ${(line.provider || "edge") === provider.id ? "active" : ""}`;
     chip.disabled = !available;
-    const action = provider.id === "piper" && !available ? piperActionText(piperStatus().reason) : "";
+    const action = !available
+      ? provider.id === "piper"
+        ? piperActionText(piperStatus().reason)
+        : provider.id === "xtts"
+          ? xttsActionText(xttsStatus().reason)
+          : ""
+      : "";
     chip.innerHTML = `<strong>${provider.label}</strong><span>${providerReasonText(provider.id)}</span>${action ? `<small>${action}</small>` : ""}`;
     chip.addEventListener("click", () => {
       line.provider = provider.id;
@@ -532,6 +578,22 @@ function renderVoices() {
     }
     els.voiceSelect.value = line.voice;
     els.voiceSelect.disabled = false;
+    els.elevenVoiceSelect.disabled = true;
+    els.elevenModelSelect.disabled = true;
+    els.rateInput.disabled = true;
+    els.pitchInput.disabled = true;
+    return;
+  }
+
+  if (line.provider === "xtts") {
+    els.voiceSelect.innerHTML = "";
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = t("xtts_voice");
+    els.voiceSelect.appendChild(option);
+    els.voiceSelect.value = "";
+    line.voice = "";
+    els.voiceSelect.disabled = true;
     els.elevenVoiceSelect.disabled = true;
     els.elevenModelSelect.disabled = true;
     els.rateInput.disabled = true;
@@ -890,7 +952,9 @@ async function testVoice() {
     });
     const data = await response.json();
     if (!data.ok) {
-      const action = data.code?.startsWith("piper_") ? piperActionText(data.code.slice(6)) : "";
+      let action = "";
+      if (data.code?.startsWith("piper_")) action = piperActionText(data.code.slice(6));
+      if (data.code?.startsWith("xtts_")) action = xttsActionText(data.code.slice(5));
       throw new Error(action ? data.error + " \u2014 " + action : data.error);
     }
     const bytes = Uint8Array.from(atob(data.audio_base64), char => char.charCodeAt(0));

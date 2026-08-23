@@ -1,0 +1,7 @@
+# Optional: high-quality local GPU TTS via Coqui XTTS v2 (torch + CUDA).
+# Install only if you want the xtts provider (large: torch + model ~2GB+):
+#   .venv\Scripts\pip install -r requirements-xtts.txt
+# For CUDA, install the matching torch wheel first, e.g.:
+#   .venv\Scripts\pip install torch --index-url https://download.pytorch.org/whl/cu121
+# Then configure RF_XTTS_ENABLED / RF_XTTS_DEVICE / RF_XTTS_SPEAKER_WAV in .env.
+TTS>=0.22.0

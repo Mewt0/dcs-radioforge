@@ -818,13 +818,14 @@ def aggregate_elevenlabs_usage(results: list[dict]) -> dict:
 
 
 def tts_providers_status() -> dict:
-    """Report TTS provider availability for the UI (edge/elevenlabs/piper)."""
-    tts.sync_piper_registration()
+    """Report TTS provider availability for the UI (edge/elevenlabs/piper/xtts)."""
+    tts.sync_provider_registrations()
     return {
         "providers": {
             "edge": {"available": True},
             "elevenlabs": {"configured": bool(elevenlabs_api_key(required=False))},
             "piper": tts.piper_status(),
+            "xtts": tts.xtts_status(),
         }
     }
 
@@ -858,6 +859,25 @@ PIPER_SETUP_ERRORS: dict[str, tuple[str, str]] = {
     ),
 }
 
+XTTS_SETUP_ERRORS: dict[str, tuple[str, str]] = {
+    "disabled": (
+        "xtts_disabled",
+        "XTTS is not enabled: set RF_XTTS_ENABLED=1 in .env",
+    ),
+    "not_installed": (
+        "xtts_package_missing",
+        "XTTS package is not installed: pip install -r requirements-xtts.txt",
+    ),
+    "speaker_wav_missing": (
+        "xtts_speaker_wav_missing",
+        "XTTS speaker wav is missing: set RF_XTTS_SPEAKER_WAV to a reference voice file",
+    ),
+    "cuda_not_available": (
+        "xtts_cuda_not_available",
+        "CUDA is not available (CPU fallback disabled); install CUDA torch or set RF_XTTS_DEVICE=cpu",
+    ),
+}
+
 
 def tts_preview(payload: dict) -> dict:
     """Synthesize a short provider preview and return it as base64 audio."""
@@ -873,6 +893,11 @@ def tts_preview(payload: dict) -> dict:
         status = tts.piper_status()
         if not status["available"]:
             code, message = PIPER_SETUP_ERRORS[status["reason"]]
+            raise PreviewError(message, code)
+    if provider == "xtts":
+        status = tts.xtts_status()
+        if not status["available"]:
+            code, message = XTTS_SETUP_ERRORS[status["reason"]]
             raise PreviewError(message, code)
     if provider == "elevenlabs" and not elevenlabs_api_key(required=False):
         raise PreviewError("ELEVENLABS_API_KEY is not configured", "elevenlabs_not_configured")
@@ -993,7 +1018,7 @@ class Handler(BaseHTTPRequestHandler):
             raw = self.rfile.read(length)
             payload = json.loads(raw.decode("utf-8"))
             load_local_env()
-            tts.sync_piper_registration()
+            tts.sync_provider_registrations()
             if parsed.path == "/api/generate":
                 items = payload.get("items") or [payload]
                 results = generate_items(items)
@@ -1060,7 +1085,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     load_local_env()
-    tts.sync_piper_registration()
+    tts.sync_provider_registrations()
     if not WEB.exists():
         raise RuntimeError(f"web assets were not found: {WEB}")
     READY.mkdir(parents=True, exist_ok=True)
