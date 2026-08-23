@@ -192,6 +192,22 @@ class ReplaceApiTest(unittest.TestCase):
             server.synthesize_audio({"text": "  "})
         self.assertEqual(ctx.exception.code, "missing_fields")
 
+    def test_synthesize_matches_original_format(self) -> None:
+        target = self._make_target("voice.ogg")
+        self._patch_synth()
+        self._patch_convert()
+        with (
+            mock.patch.object(server, "run_ffmpeg", side_effect=_fake_run_ffmpeg),
+            mock.patch.object(
+                server, "probe_audio", return_value={"codec": "vorbis", "sample_rate": 44100, "channels": 2}
+            ),
+        ):
+            result = server.synthesize_audio({"text": "привет", "matchPath": str(target)})
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["format"], "ogg")
+        self.assertEqual(result["sample_rate"], 44100)
+        self.assertTrue(result["matched"])
+
     def test_replace_with_source_skips_synthesis(self) -> None:
         target = self._make_target("voice.ogg")
         draft = self.tmp / "draft.ogg"

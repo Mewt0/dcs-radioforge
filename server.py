@@ -1268,6 +1268,17 @@ def synthesize_audio(payload: dict) -> dict:
     fmt = (payload.get("format") or "ogg").strip().lower()
     if fmt not in {"ogg", "wav", "mp3"}:
         fmt = "ogg"
+    match_path = (payload.get("matchPath") or "").strip()
+    matched = False
+    if match_path and Path(match_path).exists():
+        probe = probe_audio(Path(match_path))
+        probe_rate = probe.get("sample_rate")
+        if probe_rate:
+            sample_rate = int(probe_rate)
+        probe_ext = Path(match_path).suffix.lower().lstrip(".")
+        if probe_ext in {"ogg", "wav", "mp3"}:
+            fmt = probe_ext
+        matched = True
     file_name = safe_id((payload.get("fileName") or "").strip() or "voiceover", "voiceover")
 
     READY.mkdir(parents=True, exist_ok=True)
@@ -1290,6 +1301,7 @@ def synthesize_audio(payload: dict) -> dict:
             "sample_rate": sample_rate,
             "duration": duration,
             "voice": voice_label,
+            "matched": matched,
         }
     except tts.ExternalTTSError as exc:
         raise ReplaceError(str(exc), f"external_{exc.code}") from exc
