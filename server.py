@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import base64
 import csv
+import hashlib
 import json
 import mimetypes
 import os
@@ -1205,11 +1206,17 @@ def replace_audio(payload: dict) -> dict:
 
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    backup = BACKUP_DIR / f"{target.stem}_{target.suffix.lstrip('.')}_{stamp}.bak"
+    # Backup names are bound to the full path hash so that two different
+    # missions (work dirs) with the same audio file name never share a
+    # baseline: 'restore original' can never pull a file from mission A
+    # while working on mission B.
+    digest = hashlib.sha1(str(target.resolve()).lower().encode("utf-8")).hexdigest()[:12]
+    key = f"{digest}_{target.stem}_{target.suffix.lstrip('.')}"
+    backup = BACKUP_DIR / f"{key}_{stamp}.bak"
     shutil.copy2(target, backup)
-    # baseline = first-ever state of this file; "restore original" always uses it,
-    # so repeated replacements never shadow the original mission audio.
-    baseline = BACKUP_DIR / f"{target.stem}_{target.suffix.lstrip('.')}.baseline.bak"
+    # baseline = first-ever state of this exact file path; "restore original"
+    # always uses it, so repeated replacements never shadow the original audio.
+    baseline = BACKUP_DIR / f"{key}.baseline.bak"
     if not baseline.exists():
         shutil.copy2(target, baseline)
 

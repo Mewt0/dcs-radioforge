@@ -199,6 +199,32 @@ class ReplaceApiTest(unittest.TestCase):
             server.synthesize_audio({"text": "  "})
         self.assertEqual(ctx.exception.code, "missing_fields")
 
+    def test_baseline_isolated_between_workdirs(self) -> None:
+        dir_a = self.tmp / "mission_a" / "l10n" / "DEFAULT"
+        dir_b = self.tmp / "mission_b" / "l10n" / "DEFAULT"
+        dir_a.mkdir(parents=True)
+        dir_b.mkdir(parents=True)
+        fa = dir_a / "radio_01.ogg"
+        fb = dir_b / "radio_01.ogg"
+        fa.write_bytes(b"A-ORIGINAL")
+        fb.write_bytes(b"B-ORIGINAL")
+        self._patch_synth()
+        self._patch_convert()
+        with (
+            mock.patch.object(server, "run_ffmpeg", side_effect=_fake_run_ffmpeg),
+            mock.patch.object(
+                server, "probe_audio", return_value={"codec": "vorbis", "sample_rate": 22050, "channels": 1}
+            ),
+        ):
+            ra = server.replace_audio({"path": str(fa), "text": "привет"})
+            rb = server.replace_audio({"path": str(fb), "text": "привет"})
+        self.assertNotEqual(ra["baseline"], rb["baseline"])
+        # restore each baseline back into its own path
+        server.restore_audio({"path": str(fa), "backup": ra["baseline"]})
+        server.restore_audio({"path": str(fb), "backup": rb["baseline"]})
+        self.assertEqual(fa.read_bytes(), b"A-ORIGINAL")
+        self.assertEqual(fb.read_bytes(), b"B-ORIGINAL")
+
     def test_restore_ok(self) -> None:
         target = self._make_target("voice.ogg", data=b"NEW-AUDIO")
         backup = self.tmp / "voice_ogg_backup.bak"
