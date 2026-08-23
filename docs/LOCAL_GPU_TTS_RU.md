@@ -33,6 +33,14 @@ coqui TTS не работает на Python 3.14). Поэтому DCS RadioForge
 в UI ничего не выбрано) — `RF_XTTS_SPEAKER_WAV`. Файлы из `references/` не
 коммитятся.
 
+Транслитерация английских терминов (MASTER ARM, AGM-65, HUD и т.п.) применяется
+**автоматически** к тексту перед синтезом — словарь в
+`examples/external_tts/xtts_worker.py` (отключить: `RF_XTTS_TRANSLITERATE=0`).
+Поэтому в миссиях можно писать термины латиницей — прозвучат по-русски.
+Голос по умолчанию — `references\yt2_ref_90s_intro_24k_mono.wav`; остальные
+референсы из `outputs\youtube_voice_reference_2` подключает
+`start_gpu.ps1` через `RF_XTTS_VOICES_DIR`.
+
 ## Контракт
 
 RadioForge запускает команду из `RF_EXTERNAL_TTS_COMMAND` и подаёт JSON на stdin:

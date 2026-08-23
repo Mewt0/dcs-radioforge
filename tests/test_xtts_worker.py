@@ -163,5 +163,40 @@ class WorkerImportTest(unittest.TestCase):
         self.assertIn("voice_ref_full_24k_mono.wav", readme)
 
 
+class TransliterateTest(unittest.TestCase):
+    def test_master_arm(self) -> None:
+        mod = load_worker()
+        self.assertEqual(mod.transliterate("MASTER ARM в положение ARM"), "мастер арм в положение арм")
+
+    def test_weapon_terms(self) -> None:
+        mod = load_worker()
+        self.assertEqual(
+            mod.transliterate("AGM-65 Maverick на HUD"),
+            "эй джи эм шестьдесят пять мэверик на хад",
+        )
+
+    def test_no_partial_word_replacement(self) -> None:
+        mod = load_worker()
+        self.assertEqual(mod.transliterate("HARM по цели"), "харм по цели")
+
+    def test_disabled_via_env(self) -> None:
+        mod = load_worker()
+        with mock.patch.dict(os.environ, {"RF_XTTS_TRANSLITERATE": "0"}):
+            self.assertEqual(mod.transliterate("MASTER ARM"), "MASTER ARM")
+
+    def test_synthesize_applies_transliteration(self) -> None:
+        mod = load_worker()
+        install_fake_tts()
+        with tempfile.TemporaryDirectory() as tmp:
+            ref = Path(tmp) / "ref.wav"
+            ref.write_bytes(b"wav")
+            out = Path(tmp) / "out.wav"
+            try:
+                mod.synthesize({"text": "MASTER ARM", "output": str(out)}, str(ref), "m", "cpu")
+            finally:
+                remove_fake_tts()
+            self.assertEqual(FakeTTS.tts_to_file_calls[-1]["text"], "мастер арм")
+
+
 if __name__ == "__main__":
     unittest.main()

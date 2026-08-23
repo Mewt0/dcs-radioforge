@@ -64,7 +64,7 @@ if ($enabled) {
     }
 }
 
-$speaker = if ($SpeakerWav) { $SpeakerWav } else { Join-Path $Parent "outputs\youtube_voice_reference_2\yt2_ref_90s_intro_24k_mono.wav" }
+$speaker = if ($SpeakerWav) { $SpeakerWav } else { Join-Path $Root "references\yt2_ref_90s_intro_24k_mono.wav" }
 if ($enabled -and -not (Test-Path -LiteralPath $speaker)) {
     Write-Host "WARN: reference voice not found: $speaker - pass -SpeakerWav to enable XTTS." -ForegroundColor Yellow
     $enabled = $false
@@ -79,6 +79,10 @@ if ($enabled) {
     if (-not $env:RF_EXTERNAL_TTS_VOICE_LABEL) { $env:RF_EXTERNAL_TTS_VOICE_LABEL = "XTTS GPU" }
     if (-not $env:RF_XTTS_SPEAKER_WAV) { $env:RF_XTTS_SPEAKER_WAV = $speaker }
     if (-not $env:RF_XTTS_DEVICE) { $env:RF_XTTS_DEVICE = "auto" }
+    if (-not $env:RF_XTTS_VOICES_DIR) {
+        $voicesDir = Join-Path $Parent "outputs\youtube_voice_reference_2"
+        if (Test-Path -LiteralPath $voicesDir) { $env:RF_XTTS_VOICES_DIR = $voicesDir }
+    }
     Write-Host "XTTS enabled: voice = $speaker" -ForegroundColor Green
 } else {
     Write-Host "Starting without XTTS (Edge TTS available)." -ForegroundColor Yellow
