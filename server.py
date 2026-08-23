@@ -742,8 +742,8 @@ def generate_items(items: list[dict]) -> list[dict]:
             basename = f"{basename}_{now}"
         basename = f"{basename}_{uuid.uuid4().hex[:8]}"
 
-        mp3 = TMP / f"{basename}.mp3"
-        elevenlabs_usage, voice_label = tts.synthesize_item(item, mp3)
+        source = TMP / f"{basename}.{tts.provider_source_format(item.get('provider') or 'edge')}"
+        elevenlabs_usage, voice_label = tts.synthesize_item(item, source)
 
         row = {
             "time": now,
@@ -770,7 +770,7 @@ def generate_items(items: list[dict]) -> list[dict]:
             if fmt not in {"wav", "ogg"}:
                 continue
             target = READY / f"{basename}.{fmt}"
-            convert_audio(mp3, target, fmt, sample_rate, preset, signal_quality, mic_clicks)
+            convert_audio(source, target, fmt, sample_rate, preset, signal_quality, mic_clicks)
             converted = True
             if fmt == "wav":
                 row["wav"] = target.name
@@ -788,7 +788,7 @@ def generate_items(items: list[dict]) -> list[dict]:
                 }
             )
         if converted:
-            mp3.unlink(missing_ok=True)
+            source.unlink(missing_ok=True)
         results.append(row)
     append_manifest(results)
     return results
@@ -814,6 +814,18 @@ def aggregate_elevenlabs_usage(results: list[dict]) -> dict:
         "character_count": total_character_cost if requests_count else None,
         "text_characters": total_text_characters if requests_count else None,
         "request_ids": request_ids,
+    }
+
+
+def tts_providers_status() -> dict:
+    """Report TTS provider availability for the UI (edge/elevenlabs/piper)."""
+    tts.sync_piper_registration()
+    return {
+        "providers": {
+            "edge": {"available": True},
+            "elevenlabs": {"configured": bool(elevenlabs_api_key(required=False))},
+            "piper": tts.piper_status(),
+        }
     }
 
 
@@ -844,6 +856,10 @@ class Handler(BaseHTTPRequestHandler):
         path = unquote(parsed.path)
         if path == "/api/health":
             json_response(self, {"ok": True, "root": str(ROOT)})
+            return
+        if path == "/api/tts/providers":
+            load_local_env()
+            json_response(self, tts_providers_status())
             return
         if path == "/api/voices":
             json_response(self, {"voices": VOICE_CATALOG, "roles": ROLE_PRESETS})
@@ -904,6 +920,7 @@ class Handler(BaseHTTPRequestHandler):
             raw = self.rfile.read(length)
             payload = json.loads(raw.decode("utf-8"))
             load_local_env()
+            tts.sync_piper_registration()
             if parsed.path == "/api/generate":
                 items = payload.get("items") or [payload]
                 results = generate_items(items)
@@ -965,6 +982,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     load_local_env()
+    tts.sync_piper_registration()
     if not WEB.exists():
         raise RuntimeError(f"web assets were not found: {WEB}")
     READY.mkdir(parents=True, exist_ok=True)

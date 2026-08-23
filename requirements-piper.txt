@@ -1,0 +1,6 @@
+# Optional: local offline TTS via Piper (CPU/ONNX).
+# Install only if you want the piper provider:
+#   .venv\Scripts\pip install -r requirements-piper.txt
+# Models are NOT bundled; download them first (docs/PIPER_SETUP_RU.md or
+# scripts/download_piper_models.ps1) and point RF_PIPER_MODEL_DIR at them.
+piper-tts>=1.2.0,<2

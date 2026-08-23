@@ -25,6 +25,9 @@ class RegistryTest(unittest.TestCase):
         fallback = tts.TTS_PROVIDERS.get("no-such-provider", tts.TTS_PROVIDERS["edge"])
         self.assertIs(fallback, tts.TTS_PROVIDERS["edge"])
 
+    def test_piper_not_registered_by_default(self) -> None:
+        self.assertNotIn("piper", tts.TTS_PROVIDERS)
+
 
 class SynthesizeItemTest(unittest.TestCase):
     def setUp(self) -> None:
