@@ -131,6 +131,32 @@ http://127.0.0.1:8765/?lang=en
 release/DCS-RadioForge-v0.1.4-windows-portable.zip
 ```
 
+## Локальный Piper (offline, CPU)
+
+Piper — опциональный локальный TTS: работает без интернета на CPU. По умолчанию выключен;
+если он не настроен, в UI провайдер показывается серым с причиной и коротким действием.
+
+Установка (3 шага):
+
+```powershell
+.\venv\Scripts\pip install -r requirements-piper.txt
+powershell -ExecutionPolicy Bypass -File .\scripts\download_piper_models.ps1
+```
+
+Модели скачиваются в папку `piper-models\` (или другую через `-ModelDir`).
+Рекомендуемые голоса: `ru_RU-denis-medium`, `ru_RU-irina-medium`, `en_US-ryan-medium`.
+
+Включение в `.env`:
+
+```ini
+RF_PIPER_ENABLED=1
+RF_PIPER_MODEL_DIR=piper-models
+RF_PIPER_DEFAULT_VOICE=ru_RU-denis-medium
+```
+
+Проверка: кнопка «Проверить голос» в редакторе или `POST /api/tts/preview`.
+Подробная инструкция: [docs/PIPER_SETUP_RU.md](docs/PIPER_SETUP_RU.md).
+
 ## Карта проекта
 
 - [Карта проекта](docs/PROJECT_MAP_RU.md)

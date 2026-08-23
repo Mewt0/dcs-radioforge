@@ -64,6 +64,11 @@ const i18n = {
     piper_reason_not_installed: "пакет piper не установлен",
     piper_reason_model_dir_missing: "папка моделей не найдена",
     piper_reason_no_models: "в папке моделей нет голосов",
+    piper_action_enable: "Включите RF_PIPER_ENABLED=1 в .env",
+    piper_action_install: "Установите: pip install -r requirements-piper.txt",
+    piper_action_models: "Скачайте модели: scripts\download_piper_models.ps1",
+    test_voice: "Проверить голос",
+    preview_played: voice => `Проверка: ${voice}`,
     voice_role_names: {
       ru_darkstar: "RU командир",
       ru_raven: "RU ударная группа",
@@ -171,6 +176,11 @@ const i18n = {
     piper_reason_not_installed: "piper package not installed",
     piper_reason_model_dir_missing: "model dir missing",
     piper_reason_no_models: "no voices in model dir",
+    piper_action_enable: "Enable RF_PIPER_ENABLED=1 in .env",
+    piper_action_install: "Install: pip install -r requirements-piper.txt",
+    piper_action_models: "Download models: scripts\download_piper_models.ps1",
+    test_voice: "Test voice",
+    preview_played: voice => `Tested: ${voice}`,
     voice_role_names: {
       ru_darkstar: "RU command",
       ru_raven: "RU strike",
@@ -410,6 +420,13 @@ function providerReasonText(provider) {
   return t("provider_ready");
 }
 
+function piperActionText(reason) {
+  if (reason === "disabled") return t("piper_action_enable");
+  if (reason === "not_installed") return t("piper_action_install");
+  if (reason === "model_dir_missing" || reason === "no_models") return t("piper_action_models");
+  return "";
+}
+
 function renderProviderStatus() {
   els.providerStatus.innerHTML = "";
   const line = selectedLine();
@@ -424,7 +441,8 @@ function renderProviderStatus() {
     chip.type = "button";
     chip.className = `provider-chip ${available ? "ok" : "bad"} ${(line.provider || "edge") === provider.id ? "active" : ""}`;
     chip.disabled = !available;
-    chip.innerHTML = `<strong>${provider.label}</strong><span>${providerReasonText(provider.id)}</span>`;
+    const action = provider.id === "piper" && !available ? piperActionText(piperStatus().reason) : "";
+    chip.innerHTML = `<strong>${provider.label}</strong><span>${providerReasonText(provider.id)}</span>${action ? `<small>${action}</small>` : ""}`;
     chip.addEventListener("click", () => {
       line.provider = provider.id;
       render();
@@ -860,6 +878,33 @@ async function saveDesignedVoice(preview) {
   }
 }
 
+async function testVoice() {
+  saveEditor();
+  const line = selectedLine();
+  document.body.classList.add("busy");
+  try {
+    const response = await fetch("/api/tts/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: line.provider || "edge", voice: line.voice || "", text: line.text || "" })
+    });
+    const data = await response.json();
+    if (!data.ok) {
+      const action = data.code?.startsWith("piper_") ? piperActionText(data.code.slice(6)) : "";
+      throw new Error(action ? data.error + " \u2014 " + action : data.error);
+    }
+    const bytes = Uint8Array.from(atob(data.audio_base64), char => char.charCodeAt(0));
+    const audio = new Audio(URL.createObjectURL(new Blob([bytes], { type: data.mime })));
+    audio.play().catch(() => {});
+    setStatus(t("preview_played", data.voice), true);
+  } catch (error) {
+    console.error(error);
+    setStatus(error.message, false);
+  } finally {
+    document.body.classList.remove("busy");
+  }
+}
+
 async function generate(items) {
   saveEditor();
   document.body.classList.add("busy");
@@ -934,6 +979,7 @@ function bind() {
   els.voicePromptInput = $("voicePromptInput");
   els.voicePreviewText = $("voicePreviewText");
   els.voicePreviewList = $("voicePreviewList");
+  els.testVoice = $("testVoice");
 
   els.voicePromptInput.value = state.uiLang === "ru"
     ? "Russian male GCI controller, middle aged, calm, cold, disciplined military radio voice, short clipped delivery, serious command tone."
@@ -1029,6 +1075,7 @@ function bind() {
   });
 
   els.refreshLibrary.addEventListener("click", loadLibrary);
+  els.testVoice.addEventListener("click", testVoice);
   els.refreshElevenVoices.addEventListener("click", () => {
     loadElevenVoices();
     loadElevenUsage();

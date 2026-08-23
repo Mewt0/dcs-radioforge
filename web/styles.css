@@ -555,6 +555,16 @@ input:focus, textarea:focus, select:focus {
   color: var(--amber);
 }
 
+.provider-chip small {
+  color: var(--soft);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.test-voice-row {
+  margin-top: 8px;
+}
+
 .format-row {
   margin-top: 14px;
   justify-content: space-between;

@@ -829,6 +829,74 @@ def tts_providers_status() -> dict:
     }
 
 
+class PreviewError(Exception):
+    """Validation/setup error for /api/tts/preview with a machine-readable code."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+PREVIEW_TEXT_LIMIT = 200
+
+PIPER_SETUP_ERRORS: dict[str, tuple[str, str]] = {
+    "disabled": (
+        "piper_disabled",
+        "Piper is not enabled: set RF_PIPER_ENABLED=1 in .env",
+    ),
+    "not_installed": (
+        "piper_package_missing",
+        "Piper package is not installed: pip install -r requirements-piper.txt",
+    ),
+    "model_dir_missing": (
+        "piper_model_dir_missing",
+        r"Piper model dir is missing: set RF_PIPER_MODEL_DIR or run scripts\download_piper_models.ps1",
+    ),
+    "no_models": (
+        "piper_no_voices",
+        r"No Piper models found: run scripts\download_piper_models.ps1 to download them",
+    ),
+}
+
+
+def tts_preview(payload: dict) -> dict:
+    """Synthesize a short provider preview and return it as base64 audio."""
+    provider = (payload.get("provider") or "edge").strip()
+    voice = (payload.get("voice") or "").strip()
+    text = (payload.get("text") or "").strip()
+    if not text:
+        raise PreviewError("Preview text is empty", "empty_text")
+    if len(text) > PREVIEW_TEXT_LIMIT:
+        raise PreviewError(f"Preview text is too long (max {PREVIEW_TEXT_LIMIT} characters)", "text_too_long")
+    tts.sync_piper_registration()
+    if provider == "piper":
+        status = tts.piper_status()
+        if not status["available"]:
+            code, message = PIPER_SETUP_ERRORS[status["reason"]]
+            raise PreviewError(message, code)
+    if provider == "elevenlabs" and not elevenlabs_api_key(required=False):
+        raise PreviewError("ELEVENLABS_API_KEY is not configured", "elevenlabs_not_configured")
+    TMP.mkdir(parents=True, exist_ok=True)
+    ext = tts.provider_source_format(provider)
+    target = TMP / f"preview_{uuid.uuid4().hex[:8]}.{ext}"
+    item: dict = {"provider": provider, "voice": voice, "text": text}
+    if provider == "elevenlabs":
+        item["elevenVoiceId"] = voice
+    try:
+        _, voice_label = tts.synthesize_item(item, target)
+        audio = target.read_bytes()
+    finally:
+        target.unlink(missing_ok=True)
+    return {
+        "provider": provider,
+        "voice": voice_label,
+        "mime": "audio/mpeg" if ext == "mp3" else "audio/wav",
+        "format": ext,
+        "characters": len(text),
+        "audio_base64": base64.b64encode(audio).decode("ascii"),
+    }
+
+
 def list_library() -> list[dict]:
     READY.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -912,7 +980,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path not in {"/api/generate", "/api/elevenlabs/design", "/api/elevenlabs/create-voice"}:
+        if parsed.path not in {
+            "/api/generate",
+            "/api/elevenlabs/design",
+            "/api/elevenlabs/create-voice",
+            "/api/tts/preview",
+        }:
             text_response(self, "not found", 404)
             return
         try:
@@ -942,6 +1015,11 @@ class Handler(BaseHTTPRequestHandler):
                 result = create_elevenlabs_voice(payload)
                 json_response(self, {"ok": True, "voice": result})
                 return
+            if parsed.path == "/api/tts/preview":
+                json_response(self, {"ok": True, **tts_preview(payload)})
+                return
+        except PreviewError as exc:
+            json_response(self, {"ok": False, "error": str(exc), "code": exc.code}, 400)
         except Exception as exc:  # noqa: BLE001 - small local tool, return useful UI error.
             json_response(self, {"ok": False, "error": str(exc)}, 500)
 
