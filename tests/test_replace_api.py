@@ -19,6 +19,9 @@ def _fake_run_ffmpeg(args: list[str]) -> None:
 
 
 class ReplaceApiTest(unittest.TestCase):
+    def _history_backups(self) -> list:
+        return [p for p in server.BACKUP_DIR.glob("*.bak") if not p.name.endswith(".baseline.bak")]
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
@@ -98,10 +101,14 @@ class ReplaceApiTest(unittest.TestCase):
         self.assertEqual(result["format"], "ogg")
         self.assertEqual(result["sample_rate"], 22050)
         self.assertEqual(target.read_bytes(), b"CONV-ogg")
-        backups = list(server.BACKUP_DIR.glob("*.bak"))
+        backups = self._history_backups()
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].read_bytes(), b"OLD-AUDIO")
         self.assertEqual(result["backup"], str(backups[0]))
+        baselines = list(server.BACKUP_DIR.glob("*.baseline.bak"))
+        self.assertEqual(len(baselines), 1)
+        self.assertEqual(baselines[0].read_bytes(), b"OLD-AUDIO")
+        self.assertEqual(result["baseline"], str(baselines[0]))
 
     def test_replace_unicode_name_preserved(self) -> None:
         target = self._make_target("ывзщаоывщашыв.ogg")
@@ -136,7 +143,7 @@ class ReplaceApiTest(unittest.TestCase):
         self.assertEqual(result["channels"], 2)
         self.assertEqual(result["duration"], 3.5)
         self.assertEqual(target.read_bytes(), b"CONV-wav")
-        self.assertEqual(len(list(server.BACKUP_DIR.glob("*.bak"))), 1)
+        self.assertEqual(len(self._history_backups()), 1)
 
     def test_replace_mp3(self) -> None:
         target = self._make_target("voice.mp3")
@@ -168,7 +175,7 @@ class ReplaceApiTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "external_command_failed")
         # target untouched, backup still created
         self.assertEqual(target.read_bytes(), b"OLD-AUDIO")
-        self.assertEqual(len(list(server.BACKUP_DIR.glob("*.bak"))), 1)
+        self.assertEqual(len(self._history_backups()), 1)
 
     def test_synthesize_ok(self) -> None:
         self._patch_synth()
@@ -237,7 +244,7 @@ class ReplaceApiTest(unittest.TestCase):
         self.assertTrue(result["ok"])
         # fake convert writes CONV-ogg; source was not synthesized (no tts mock -> would fail if called)
         self.assertEqual(target.read_bytes(), b"CONV-ogg")
-        self.assertEqual(len(list(server.BACKUP_DIR.glob("*.bak"))), 1)
+        self.assertEqual(len(self._history_backups()), 1)
 
 
 if __name__ == "__main__":

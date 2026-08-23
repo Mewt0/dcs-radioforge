@@ -1207,6 +1207,11 @@ def replace_audio(payload: dict) -> dict:
     stamp = time.strftime("%Y%m%d-%H%M%S")
     backup = BACKUP_DIR / f"{target.stem}_{target.suffix.lstrip('.')}_{stamp}.bak"
     shutil.copy2(target, backup)
+    # baseline = first-ever state of this file; "restore original" always uses it,
+    # so repeated replacements never shadow the original mission audio.
+    baseline = BACKUP_DIR / f"{target.stem}_{target.suffix.lstrip('.')}.baseline.bak"
+    if not baseline.exists():
+        shutil.copy2(target, baseline)
 
     TMP.mkdir(parents=True, exist_ok=True)
     basename = f"replace_{uuid.uuid4().hex[:8]}"
@@ -1240,6 +1245,7 @@ def replace_audio(payload: dict) -> dict:
             "duration": duration,
             "voice": voice_label,
             "backup": str(backup),
+            "baseline": str(baseline),
         }
     except tts.ExternalTTSError as exc:
         raise ReplaceError(str(exc), f"external_{exc.code}") from exc
