@@ -839,7 +839,7 @@ class PreviewError(Exception):
         self.code = code
 
 
-PREVIEW_TEXT_LIMIT = 200
+PREVIEW_TEXT_LIMIT = 1000
 
 PIPER_SETUP_ERRORS: dict[str, tuple[str, str]] = {
     "disabled": (

@@ -84,6 +84,16 @@ if ($enabled) {
     Write-Host "Starting without XTTS (Edge TTS available)." -ForegroundColor Yellow
 }
 
+# --- port check: restart any stale server on the target port ------------------
+$inUse = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+if ($inUse) {
+    foreach ($conn in $inUse) {
+        Write-Host "Port $Port is busy (PID $($conn.OwningProcess)) - stopping it and restarting." -ForegroundColor Yellow
+        Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Milliseconds 400
+}
+
 # --- launch -------------------------------------------------------------------
 $args = @("--host", $Address, "--port", "$Port")
 if (-not $NoOpen) { $args += "--open" }

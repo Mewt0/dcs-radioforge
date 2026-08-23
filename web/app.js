@@ -12,6 +12,8 @@ const i18n = {
     callsign: "Позывной",
     file_id: "Имя файла",
     phrase: "Текст реплики",
+    characters: "симв.",
+    status_elapsed: n => `за ${n} c`,
     provider: "Провайдер",
     voice: "Голос",
     eleven_voice: "Голос ElevenLabs",
@@ -142,6 +144,8 @@ const i18n = {
     callsign: "Callsign",
     file_id: "File id",
     phrase: "Phrase",
+    characters: "chars",
+    status_elapsed: n => `in ${n}s`,
     provider: "Provider",
     voice: "Voice",
     eleven_voice: "ElevenLabs voice",
@@ -264,13 +268,14 @@ const state = {
   roles: [],
   presets: {},
   selected: 0,
+  lastProvider: "edge",
   results: [],
   lines: [
     {
       id: "darkstar_wakeup",
       speaker: "DARKSTAR",
       lang: "ru",
-      provider: "edge",
+      provider: state.lastProvider || "edge",
       voice: "ru-RU-DmitryNeural",
       elevenVoiceId: "",
       elevenModel: "eleven_multilingual_v2",
@@ -285,6 +290,40 @@ const state = {
     }
   ]
 };
+
+const STATE_KEY = "dcs-radioforge-state";
+let persistTimer = null;
+
+function schedulePersist() {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(persistState, 400);
+}
+
+function persistState() {
+  try {
+    localStorage.setItem(
+      STATE_KEY,
+      JSON.stringify({ lines: state.lines, selected: state.selected, lastProvider: state.lastProvider })
+    );
+  } catch (error) {
+    console.error("persist failed", error);
+  }
+}
+
+function loadSavedState() {
+  try {
+    const raw = localStorage.getItem(STATE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (Array.isArray(saved.lines) && saved.lines.length) {
+      state.lines = saved.lines;
+      state.selected = Math.min(Number(saved.selected) || 0, state.lines.length - 1);
+      state.lastProvider = saved.lastProvider || "edge";
+    }
+  } catch (error) {
+    console.error("load saved state failed", error);
+  }
+}
 
 const samples = [
   {
@@ -733,6 +772,11 @@ function renderEditor() {
   els.speakerInput.value = line.speaker;
   els.idInput.value = line.id;
   els.textInput.value = line.text;
+  const charCount = textCharacters(line.text);
+  if (els.charCount) {
+    els.charCount.textContent = `${charCount} ${t("characters")}`;
+    els.charCount.classList.toggle("over", charCount > 1000);
+  }
   els.rateInput.value = line.rate;
   els.pitchInput.value = line.pitch;
   els.signalQuality.value = line.signalQuality;
@@ -797,6 +841,7 @@ function renderResults() {
         <small>${file.format.toUpperCase()} / ${(file.size / 1024).toFixed(1)} KB</small>
       </div>
       <audio controls src="${file.url}"></audio>
+      <a class="download-btn" href="${file.url}" download="${file.name}" title="Download">\u2193</a>
     `;
     els.resultList.appendChild(row);
   });
@@ -811,6 +856,7 @@ function render() {
   renderPresets();
   renderVoicePreviews();
   renderResults();
+  schedulePersist();
 }
 
 function saveEditor() {
@@ -820,6 +866,7 @@ function saveEditor() {
   line.id = els.idInput.value.trim() || "line";
   line.text = els.textInput.value.trim();
   line.provider = els.providerSelect.value;
+  state.lastProvider = line.provider;
   line.voice = els.voiceSelect.value;
   line.elevenVoiceId = els.elevenVoiceSelect.value;
   line.elevenModel = els.elevenModelSelect.value;
@@ -1036,6 +1083,7 @@ async function generate(items) {
   saveEditor();
   document.body.classList.add("busy");
   setStatus(t("status_generating"), true);
+  const startedAt = Date.now();
   try {
     const response = await fetch("/api/generate", {
       method: "POST",
@@ -1054,7 +1102,8 @@ async function generate(items) {
     const usageText = data.elevenlabs?.requests
       ? ` / ${formatLastElevenUsage()}`
       : "";
-    setStatus(`${t("status_generated", files.length)}${usageText}`, true);
+    const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+    setStatus(`${t("status_generated", files.length)}${usageText} \u00b7 ${t("status_elapsed", seconds)}`, true);
     renderResults();
   } catch (error) {
     console.error(error);
@@ -1219,6 +1268,7 @@ async function loadLibrary() {
 
 async function boot() {
   bind();
+  loadSavedState();
   const [voicesResponse, presetsResponse] = await Promise.all([
     fetch("/api/voices"),
     fetch("/api/presets")

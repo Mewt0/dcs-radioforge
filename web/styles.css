@@ -269,6 +269,22 @@ input:focus, textarea:focus, select:focus {
   box-shadow: 0 0 0 3px rgba(67, 212, 216, 0.12);
 }
 
+.label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.char-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.char-count.over {
+  color: var(--amber);
+}
+
 .textarea-label {
   padding: 16px 16px 0;
 }
@@ -385,13 +401,31 @@ input:focus, textarea:focus, select:focus {
 
 .result {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 10px;
   align-items: center;
   padding: 12px;
   margin-bottom: 10px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(255,255,255,0.035);
+}
+
+.download-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 16px;
+  background: rgba(255,255,255,0.04);
+}
+
+.download-btn:hover {
+  color: var(--cyan);
+  border-color: rgba(67, 212, 216, 0.4);
 }
 
 .result strong {

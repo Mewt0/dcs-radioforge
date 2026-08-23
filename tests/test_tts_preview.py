@@ -22,8 +22,20 @@ class PreviewValidationTest(unittest.TestCase):
 
     def test_long_text_rejected(self) -> None:
         with self.assertRaises(server.PreviewError) as ctx:
-            server.tts_preview({"provider": "edge", "text": "x" * 201})
+            server.tts_preview({"provider": "edge", "text": "x" * 1001})
         self.assertEqual(ctx.exception.code, "text_too_long")
+
+    def test_lesson_length_text_accepted(self) -> None:
+        async def fake_synth(text: str, voice: str, rate: str, pitch: str, volume: str, target: Path) -> None:
+            Path(target).write_bytes(b"MP3")
+
+        original = tts.synthesize_mp3
+        tts.synthesize_mp3 = fake_synth
+        try:
+            result = server.tts_preview({"provider": "edge", "text": "x" * 1000})
+        finally:
+            tts.synthesize_mp3 = original
+        self.assertEqual(result["characters"], 1000)
 
 
 class PreviewSynthTest(unittest.TestCase):
