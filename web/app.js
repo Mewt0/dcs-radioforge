@@ -77,6 +77,12 @@ const i18n = {
     xtts_action_install: "Установите: pip install -r requirements-xtts.txt",
     xtts_action_speaker: "Задайте RF_XTTS_SPEAKER_WAV (путь к референсному wav)",
     xtts_action_cuda: "Установите CUDA-версию torch или RF_XTTS_DEVICE=cpu",
+    external_free: "Local GPU: бесплатно (offline)",
+    external_voice: "Голос Local GPU (из конфига)",
+    external_reason_disabled: "не включён (RF_EXTERNAL_TTS_ENABLED)",
+    external_reason_command_missing: "не задана команда (RF_EXTERNAL_TTS_COMMAND)",
+    external_action_enable: "Включите RF_EXTERNAL_TTS_ENABLED=1 в .env",
+    external_action_command: "Задайте RF_EXTERNAL_TTS_COMMAND (путь к python.exe + скрипту)",
     test_voice: "Проверить голос",
     preview_played: voice => `Проверка: ${voice}`,
     voice_role_names: {
@@ -199,6 +205,12 @@ const i18n = {
     xtts_action_install: "Install: pip install -r requirements-xtts.txt",
     xtts_action_speaker: "Set RF_XTTS_SPEAKER_WAV (path to a reference wav)",
     xtts_action_cuda: "Install CUDA torch or set RF_XTTS_DEVICE=cpu",
+    external_free: "Local GPU: free (offline)",
+    external_voice: "Local GPU voice (from config)",
+    external_reason_disabled: "not enabled (RF_EXTERNAL_TTS_ENABLED)",
+    external_reason_command_missing: "RF_EXTERNAL_TTS_COMMAND not set",
+    external_action_enable: "Enable RF_EXTERNAL_TTS_ENABLED=1 in .env",
+    external_action_command: "Set RF_EXTERNAL_TTS_COMMAND (python.exe + script path)",
     test_voice: "Test voice",
     preview_played: voice => `Tested: ${voice}`,
     voice_role_names: {
@@ -373,6 +385,7 @@ function formatEstimate(estimate) {
     const provider = selectedLine()?.provider || "edge";
     if (provider === "piper") return t("piper_free");
     if (provider === "xtts") return t("xtts_free");
+    if (provider === "external") return t("external_free");
     return t("eleven_edge_free");
   }
   if (!estimate.chars) return t("eleven_no_cost");
@@ -428,9 +441,14 @@ function xttsStatus() {
   return state.ttsProviders?.providers?.xtts || { available: false, reason: "disabled" };
 }
 
+function externalStatus() {
+  return state.ttsProviders?.providers?.external || { available: false, reason: "disabled" };
+}
+
 function providerAvailable(provider) {
   if (provider === "piper") return Boolean(piperStatus().available);
   if (provider === "xtts") return Boolean(xttsStatus().available);
+  if (provider === "external") return Boolean(externalStatus().available);
   return true;
 }
 
@@ -444,6 +462,11 @@ function providerReasonText(provider) {
     const status = xttsStatus();
     if (status.available) return t("provider_ready");
     return t(`xtts_reason_${status.reason || "disabled"}`) || status.reason || "";
+  }
+  if (provider === "external") {
+    const status = externalStatus();
+    if (status.available) return t("provider_ready");
+    return t(`external_reason_${status.reason || "disabled"}`) || status.reason || "";
   }
   if (provider === "elevenlabs") {
     return state.elevenConfigured ? t("provider_ready") : t("eleven_missing");
@@ -466,6 +489,12 @@ function xttsActionText(reason) {
   return "";
 }
 
+function externalActionText(reason) {
+  if (reason === "disabled") return t("external_action_enable");
+  if (reason === "command_missing") return t("external_action_command");
+  return "";
+}
+
 function renderProviderStatus() {
   els.providerStatus.innerHTML = "";
   const line = selectedLine();
@@ -473,7 +502,8 @@ function renderProviderStatus() {
     { id: "edge", label: "Edge TTS" },
     { id: "elevenlabs", label: "ElevenLabs" },
     { id: "piper", label: "Piper" },
-    { id: "xtts", label: "XTTS (GPU)" }
+    { id: "xtts", label: "XTTS (GPU)" },
+    { id: "external", label: "Local GPU" }
   ];
   list.forEach(provider => {
     const available = providerAvailable(provider.id);
@@ -486,7 +516,9 @@ function renderProviderStatus() {
         ? piperActionText(piperStatus().reason)
         : provider.id === "xtts"
           ? xttsActionText(xttsStatus().reason)
-          : ""
+          : provider.id === "external"
+            ? externalActionText(externalStatus().reason)
+            : ""
       : "";
     chip.innerHTML = `<strong>${provider.label}</strong><span>${providerReasonText(provider.id)}</span>${action ? `<small>${action}</small>` : ""}`;
     chip.addEventListener("click", () => {
@@ -590,6 +622,22 @@ function renderVoices() {
     const option = document.createElement("option");
     option.value = "";
     option.textContent = t("xtts_voice");
+    els.voiceSelect.appendChild(option);
+    els.voiceSelect.value = "";
+    line.voice = "";
+    els.voiceSelect.disabled = true;
+    els.elevenVoiceSelect.disabled = true;
+    els.elevenModelSelect.disabled = true;
+    els.rateInput.disabled = true;
+    els.pitchInput.disabled = true;
+    return;
+  }
+
+  if (line.provider === "external") {
+    els.voiceSelect.innerHTML = "";
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = externalStatus().voice_label || t("external_voice");
     els.voiceSelect.appendChild(option);
     els.voiceSelect.value = "";
     line.voice = "";
@@ -955,6 +1003,7 @@ async function testVoice() {
       let action = "";
       if (data.code?.startsWith("piper_")) action = piperActionText(data.code.slice(6));
       if (data.code?.startsWith("xtts_")) action = xttsActionText(data.code.slice(5));
+      if (data.code?.startsWith("external_")) action = externalActionText(data.code.slice(9));
       throw new Error(action ? data.error + " \u2014 " + action : data.error);
     }
     const bytes = Uint8Array.from(atob(data.audio_base64), char => char.charCodeAt(0));

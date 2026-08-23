@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import json
 import os
+import subprocess
 import wave
 from collections.abc import Callable
 from pathlib import Path
@@ -39,9 +41,11 @@ TTS_PROVIDERS: dict[str, Callable[[dict, Path], dict | None]] = {
 def synthesize_item(item: dict, target: Path) -> tuple[dict | None, str]:
     provider = item.get("provider") or "edge"
     if provider == "piper" and "piper" not in TTS_PROVIDERS:
-        raise RuntimeError(f"Piper provider is unavailable: {piper_status()['reason']}")
+        raise RuntimeError(f"Piper provider is unavailable: {piper_status().get('reason', 'unavailable')}")
     if provider == "xtts" and "xtts" not in TTS_PROVIDERS:
-        raise RuntimeError(f"XTTS provider is unavailable: {xtts_status()['reason']}")
+        raise RuntimeError(f"XTTS provider is unavailable: {xtts_status().get('reason', 'unavailable')}")
+    if provider == "external" and "external" not in TTS_PROVIDERS:
+        raise RuntimeError(f"External TTS provider is unavailable: {external_status().get('reason', 'unavailable')}")
     fn = TTS_PROVIDERS.get(provider, TTS_PROVIDERS["edge"])
     usage = fn(item, target)
     if provider == "elevenlabs":
@@ -50,12 +54,14 @@ def synthesize_item(item: dict, target: Path) -> tuple[dict | None, str]:
         return usage, item.get("voice") or PIPER_DEFAULT_VOICE
     if provider == "xtts":
         return usage, item.get("voice") or "xtts"
+    if provider == "external":
+        return usage, item.get("voice") or os.environ.get("RF_EXTERNAL_TTS_VOICE_LABEL") or "local-gpu"
     return usage, item.get("voice") or "ru-RU-DmitryNeural"
 
 
 def provider_source_format(name: str) -> str:
-    """Source audio extension a provider writes (mp3 for edge/elevenlabs, wav for piper/xtts)."""
-    if name in {"piper", "xtts"}:
+    """Source audio extension a provider writes (mp3 for edge/elevenlabs, wav for piper/xtts/external)."""
+    if name in {"piper", "xtts", "external"}:
         return "wav"
     return "mp3"
 
@@ -186,7 +192,114 @@ def sync_xtts_registration() -> None:
         TTS_PROVIDERS.pop("xtts", None)
 
 
+class ExternalTTSError(Exception):
+    """Runtime failure of the external TTS command with a machine-readable code."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _external_timeout() -> int:
+    raw = (os.environ.get("RF_EXTERNAL_TTS_TIMEOUT") or "").strip()
+    try:
+        return max(1, int(float(raw)))
+    except (TypeError, ValueError):
+        return 120
+
+
+def external_status() -> dict:
+    """Report external TTS command availability (separate venv/process bridge).
+
+    Reads RF_EXTERNAL_TTS_ENABLED / RF_EXTERNAL_TTS_COMMAND / RF_EXTERNAL_TTS_TIMEOUT /
+    RF_EXTERNAL_TTS_VOICE_LABEL from the environment. The command itself is not
+    probed here; runtime failures surface as ExternalTTSError during synthesis.
+    """
+    if os.environ.get("RF_EXTERNAL_TTS_ENABLED") != "1":
+        return {"available": False, "reason": "disabled"}
+    command = (os.environ.get("RF_EXTERNAL_TTS_COMMAND") or "").strip()
+    if not command:
+        return {"available": False, "reason": "command_missing"}
+    return {
+        "available": True,
+        "command": command,
+        "timeout": _external_timeout(),
+        "voice_label": os.environ.get("RF_EXTERNAL_TTS_VOICE_LABEL") or "Local GPU",
+    }
+
+
+def _split_command(command: str) -> list[str]:
+    """Split a Windows command line into argv.
+
+    Double quotes group tokens and are removed; backslashes are kept literal
+    (unlike shlex posix=True, which would eat them in paths like C:/Users/...).
+    """
+    tokens: list[str] = []
+    current: list[str] = []
+    in_quotes = False
+    for char in command:
+        if char == '"':
+            in_quotes = not in_quotes
+        elif char.isspace() and not in_quotes:
+            if current:
+                tokens.append("".join(current))
+                current = []
+        else:
+            current.append(char)
+    if current:
+        tokens.append("".join(current))
+    return tokens
+
+
+def external_provider(item: dict, target: Path) -> dict | None:
+    """Run an external TTS command (its own venv/process) and take the WAV it writes.
+
+    The command receives a JSON job on stdin: {text, voice, language, output}
+    and must write WAV audio to the "output" path.
+    """
+    status = external_status()
+    if not status["available"]:
+        raise RuntimeError(f"External TTS provider is unavailable: {status['reason']}")
+    text = (item.get("text") or "").strip()
+    raw_lang = item.get("lang") or ""
+    language = raw_lang if raw_lang in {"ru", "en"} else _xtts_language(text)
+    payload = {
+        "text": text,
+        "voice": item.get("voice") or "",
+        "language": language,
+        "output": str(target),
+    }
+    try:
+        proc = subprocess.run(
+            _split_command(status["command"]),
+            input=json.dumps(payload, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=status["timeout"],
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise ExternalTTSError(f"External TTS command timed out after {status['timeout']}s", "timeout") from None
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        detail = stderr or "no output"
+        raise ExternalTTSError(f"External TTS command failed (exit {proc.returncode}): {detail}", "command_failed")
+    if not target.exists():
+        raise ExternalTTSError("External TTS command did not write the output wav", "command_failed")
+    return None
+
+
+def sync_external_registration() -> None:
+    """Keep TTS_PROVIDERS in sync with current external command availability."""
+    if external_status()["available"]:
+        TTS_PROVIDERS.setdefault("external", external_provider)
+    else:
+        TTS_PROVIDERS.pop("external", None)
+
+
 def sync_provider_registrations() -> None:
-    """Refresh all optional provider registrations (piper, xtts)."""
+    """Refresh all optional provider registrations (piper, xtts, external)."""
     sync_piper_registration()
     sync_xtts_registration()
+    sync_external_registration()

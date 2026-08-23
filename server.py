@@ -818,7 +818,7 @@ def aggregate_elevenlabs_usage(results: list[dict]) -> dict:
 
 
 def tts_providers_status() -> dict:
-    """Report TTS provider availability for the UI (edge/elevenlabs/piper/xtts)."""
+    """Report TTS provider availability for the UI (edge/elevenlabs/piper/xtts/external)."""
     tts.sync_provider_registrations()
     return {
         "providers": {
@@ -826,6 +826,7 @@ def tts_providers_status() -> dict:
             "elevenlabs": {"configured": bool(elevenlabs_api_key(required=False))},
             "piper": tts.piper_status(),
             "xtts": tts.xtts_status(),
+            "external": tts.external_status(),
         }
     }
 
@@ -878,6 +879,17 @@ XTTS_SETUP_ERRORS: dict[str, tuple[str, str]] = {
     ),
 }
 
+EXTERNAL_SETUP_ERRORS: dict[str, tuple[str, str]] = {
+    "disabled": (
+        "external_disabled",
+        "External TTS is not enabled: set RF_EXTERNAL_TTS_ENABLED=1 in .env",
+    ),
+    "command_missing": (
+        "external_command_missing",
+        "External TTS command is not set: configure RF_EXTERNAL_TTS_COMMAND",
+    ),
+}
+
 
 def tts_preview(payload: dict) -> dict:
     """Synthesize a short provider preview and return it as base64 audio."""
@@ -888,7 +900,7 @@ def tts_preview(payload: dict) -> dict:
         raise PreviewError("Preview text is empty", "empty_text")
     if len(text) > PREVIEW_TEXT_LIMIT:
         raise PreviewError(f"Preview text is too long (max {PREVIEW_TEXT_LIMIT} characters)", "text_too_long")
-    tts.sync_piper_registration()
+    tts.sync_provider_registrations()
     if provider == "piper":
         status = tts.piper_status()
         if not status["available"]:
@@ -898,6 +910,11 @@ def tts_preview(payload: dict) -> dict:
         status = tts.xtts_status()
         if not status["available"]:
             code, message = XTTS_SETUP_ERRORS[status["reason"]]
+            raise PreviewError(message, code)
+    if provider == "external":
+        status = tts.external_status()
+        if not status["available"]:
+            code, message = EXTERNAL_SETUP_ERRORS[status["reason"]]
             raise PreviewError(message, code)
     if provider == "elevenlabs" and not elevenlabs_api_key(required=False):
         raise PreviewError("ELEVENLABS_API_KEY is not configured", "elevenlabs_not_configured")
@@ -910,6 +927,8 @@ def tts_preview(payload: dict) -> dict:
     try:
         _, voice_label = tts.synthesize_item(item, target)
         audio = target.read_bytes()
+    except tts.ExternalTTSError as exc:
+        raise PreviewError(str(exc), f"external_{exc.code}") from exc
     finally:
         target.unlink(missing_ok=True)
     return {
