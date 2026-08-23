@@ -17,3 +17,8 @@ Thumbs.db
 dist/
 release/
 *.spec
+
+# Optional local GPU TTS (external worker) pieces — can be large, never commit
+.venv-xtts/
+ffmpeg-shared/
+piper-models/
