@@ -9,7 +9,9 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
+import uuid
 import wave
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -686,31 +688,35 @@ def wav_duration(path: Path) -> float | None:
         return f.getnframes() / float(f.getframerate())
 
 
+_MANIFEST_LOCK = threading.Lock()
+
+
 def append_manifest(rows: list[dict]) -> None:
     BUILD.mkdir(parents=True, exist_ok=True)
     manifest = BUILD / "gui_manifest.csv"
-    exists = manifest.exists()
-    with manifest.open("a", encoding="utf-8-sig", newline="") as f:
-        fields = [
-            "time",
-            "id",
-            "speaker",
-            "voice",
-            "preset",
-            "signal_quality",
-            "mic_clicks",
-            "wav",
-            "ogg",
-            "duration_sec",
-            "elevenlabs_character_cost",
-            "elevenlabs_text_characters",
-            "text",
-        ]
-        writer = csv.DictWriter(f, fieldnames=fields)
-        if not exists:
-            writer.writeheader()
-        for row in rows:
-            writer.writerow({key: row.get(key, "") for key in fields})
+    with _MANIFEST_LOCK:
+        exists = manifest.exists()
+        with manifest.open("a", encoding="utf-8-sig", newline="") as f:
+            fields = [
+                "time",
+                "id",
+                "speaker",
+                "voice",
+                "preset",
+                "signal_quality",
+                "mic_clicks",
+                "wav",
+                "ogg",
+                "duration_sec",
+                "elevenlabs_character_cost",
+                "elevenlabs_text_characters",
+                "text",
+            ]
+            writer = csv.DictWriter(f, fieldnames=fields)
+            if not exists:
+                writer.writeheader()
+            for row in rows:
+                writer.writerow({key: row.get(key, "") for key in fields})
 
 
 def generate_items(items: list[dict]) -> list[dict]:
@@ -734,6 +740,7 @@ def generate_items(items: list[dict]) -> list[dict]:
         basename = safe_id(item.get("fileName") or line_id, line_id)
         if item.get("timestamp", True):
             basename = f"{basename}_{now}"
+        basename = f"{basename}_{uuid.uuid4().hex[:8]}"
 
         mp3 = TMP / f"{basename}.mp3"
         elevenlabs_usage, voice_label = tts.synthesize_item(item, mp3)
@@ -758,11 +765,13 @@ def generate_items(items: list[dict]) -> list[dict]:
             row["elevenlabs"] = elevenlabs_usage
             row["elevenlabs_character_cost"] = elevenlabs_usage.get("character_count") or ""
             row["elevenlabs_text_characters"] = elevenlabs_usage.get("text_characters") or ""
+        converted = False
         for fmt in formats:
             if fmt not in {"wav", "ogg"}:
                 continue
             target = READY / f"{basename}.{fmt}"
             convert_audio(mp3, target, fmt, sample_rate, preset, signal_quality, mic_clicks)
+            converted = True
             if fmt == "wav":
                 row["wav"] = target.name
                 duration = wav_duration(target)
@@ -778,6 +787,8 @@ def generate_items(items: list[dict]) -> list[dict]:
                     "size": target.stat().st_size,
                 }
             )
+        if converted:
+            mp3.unlink(missing_ok=True)
         results.append(row)
     append_manifest(results)
     return results
