@@ -197,6 +197,17 @@ class TransliterateTest(unittest.TestCase):
                 remove_fake_tts()
             self.assertEqual(FakeTTS.tts_to_file_calls[-1]["text"], "мастер арм")
 
+    def test_caucasus_airbases(self) -> None:
+        mod = load_worker()
+        self.assertEqual(
+            mod.transliterate("Batumi, Maykop, Mineralnye Vody, Sochi-Adler"),
+            "Батуми, Майкоп, Минеральные Воды, Сочи-Адлер",
+        )
+        self.assertEqual(
+            mod.transliterate("Sukhumi-Babushara и Senaki-Kolkhi"),
+            "Сухуми-Бабушара и Сенаки-Колхи",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
