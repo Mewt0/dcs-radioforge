@@ -11,8 +11,9 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 
-import edge_tts
 import imageio_ffmpeg
+
+import tts
 
 
 DEFAULT_VOICE = "ru-RU-DmitryNeural"
@@ -66,17 +67,6 @@ def read_lines(path: Path, default_voice: str) -> list[Line]:
                 )
             )
     return rows
-
-
-async def synthesize_mp3(line: Line, target: Path) -> None:
-    communicate = edge_tts.Communicate(
-        line.text,
-        voice=line.voice,
-        rate=line.rate,
-        pitch=line.pitch,
-        volume=line.volume,
-    )
-    await communicate.save(str(target))
 
 
 def ffmpeg() -> str:
@@ -194,7 +184,7 @@ async def generate(args: argparse.Namespace) -> int:
     for line in lines:
         print(f"[tts] {line.id}: {line.speaker or line.voice}")
         mp3_path = temp_dir / f"{line.id}.mp3"
-        await synthesize_mp3(line, mp3_path)
+        await tts.synthesize_mp3(line.text, line.voice, line.rate, line.pitch, line.volume, mp3_path)
 
         wav_name = ""
         ogg_name = ""

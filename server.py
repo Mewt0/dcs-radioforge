@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import base64
 import csv
 import json
@@ -19,8 +18,9 @@ from urllib import error as urlerror
 from urllib import parse, request
 from urllib.parse import unquote, urlparse
 
-import edge_tts
 import imageio_ffmpeg
+
+import tts
 
 
 SOURCE_ROOT = Path(__file__).resolve().parent
@@ -376,11 +376,6 @@ def list_elevenlabs_models() -> list[dict]:
     return models
 
 
-async def synthesize_mp3(text: str, voice: str, rate: str, pitch: str, volume: str, target: Path) -> None:
-    communicate = edge_tts.Communicate(text, voice=voice, rate=rate, pitch=pitch, volume=volume)
-    await communicate.save(str(target))
-
-
 def synthesize_elevenlabs_mp3(
     text: str,
     voice_id: str,
@@ -419,6 +414,19 @@ def synthesize_elevenlabs_mp3(
         }
     )
     return usage
+
+
+def elevenlabs_provider(item: dict, target: Path) -> dict | None:
+    return synthesize_elevenlabs_mp3(
+        (item.get("text") or "").strip(),
+        item.get("elevenVoiceId") or "",
+        item.get("elevenModel") or "eleven_multilingual_v2",
+        item.get("elevenLanguage") or item.get("lang") or "",
+        target,
+    )
+
+
+tts.TTS_PROVIDERS["elevenlabs"] = elevenlabs_provider
 
 
 def list_elevenlabs_voices() -> list[dict]:
@@ -644,14 +652,6 @@ def generate_items(items: list[dict]) -> list[dict]:
             continue
         line_id = safe_id(item.get("id") or f"line_{index:03d}", f"line_{index:03d}")
         speaker = (item.get("speaker") or "").strip()
-        provider = item.get("provider") or "edge"
-        voice = item.get("voice") or "ru-RU-DmitryNeural"
-        eleven_voice_id = item.get("elevenVoiceId") or ""
-        eleven_model = item.get("elevenModel") or "eleven_multilingual_v2"
-        eleven_language = item.get("elevenLanguage") or item.get("lang") or ""
-        rate = item.get("rate") or "+0%"
-        pitch = item.get("pitch") or "+0Hz"
-        volume = item.get("volume") or "+0%"
         preset = item.get("preset") or "srs_cockpit"
         signal_quality = int(item.get("signalQuality") or 86)
         mic_clicks = bool(item.get("micClicks", True))
@@ -664,13 +664,7 @@ def generate_items(items: list[dict]) -> list[dict]:
             basename = f"{basename}_{now}"
 
         mp3 = TMP / f"{basename}.mp3"
-        elevenlabs_usage: dict | None = None
-        if provider == "elevenlabs":
-            elevenlabs_usage = synthesize_elevenlabs_mp3(text, eleven_voice_id, eleven_model, eleven_language, mp3)
-            voice_label = eleven_voice_id
-        else:
-            asyncio.run(synthesize_mp3(text, voice, rate, pitch, volume, mp3))
-            voice_label = voice
+        elevenlabs_usage, voice_label = tts.synthesize_item(item, mp3)
 
         row = {
             "time": now,
