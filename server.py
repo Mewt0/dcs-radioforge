@@ -22,7 +22,6 @@ import imageio_ffmpeg
 
 import tts
 
-
 SOURCE_ROOT = Path(__file__).resolve().parent
 RESOURCE_ROOT = Path(getattr(sys, "_MEIPASS", SOURCE_ROOT))
 APP_ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else SOURCE_ROOT
@@ -36,24 +35,95 @@ ELEVENLABS_HOST = "https://api.elevenlabs.io"
 ELEVENLABS_V1 = f"{ELEVENLABS_HOST}/v1"
 
 VOICE_CATALOG = [
-    {"name": "ru-RU-DmitryNeural", "lang": "ru", "gender": "Male", "role": "Russian controller", "tone": "Friendly, Positive"},
-    {"name": "ru-RU-SvetlanaNeural", "lang": "ru", "gender": "Female", "role": "Russian package / ops", "tone": "Friendly, Positive"},
-    {"name": "en-US-ChristopherNeural", "lang": "en", "gender": "Male", "role": "AWACS / command", "tone": "Reliable, Authority"},
+    {
+        "name": "ru-RU-DmitryNeural",
+        "lang": "ru",
+        "gender": "Male",
+        "role": "Russian controller",
+        "tone": "Friendly, Positive",
+    },
+    {
+        "name": "ru-RU-SvetlanaNeural",
+        "lang": "ru",
+        "gender": "Female",
+        "role": "Russian package / ops",
+        "tone": "Friendly, Positive",
+    },
+    {
+        "name": "en-US-ChristopherNeural",
+        "lang": "en",
+        "gender": "Male",
+        "role": "AWACS / command",
+        "tone": "Reliable, Authority",
+    },
     {"name": "en-US-SteffanNeural", "lang": "en", "gender": "Male", "role": "JTAC / controller", "tone": "Rational"},
     {"name": "en-US-EricNeural", "lang": "en", "gender": "Male", "role": "Tactical brief", "tone": "Rational"},
     {"name": "en-GB-ThomasNeural", "lang": "en", "gender": "Male", "role": "FAC / coalition", "tone": "Calm, British"},
     {"name": "en-CA-LiamNeural", "lang": "en", "gender": "Male", "role": "Flight lead", "tone": "Calm, clear"},
-    {"name": "en-AU-WilliamMultilingualNeural", "lang": "en", "gender": "Male", "role": "Package lead", "tone": "Friendly, Positive"},
-    {"name": "en-US-AriaNeural", "lang": "en", "gender": "Female", "role": "Intel / briefing", "tone": "Positive, Confident"},
-    {"name": "en-GB-SoniaNeural", "lang": "en", "gender": "Female", "role": "British ops", "tone": "Friendly, Positive"},
+    {
+        "name": "en-AU-WilliamMultilingualNeural",
+        "lang": "en",
+        "gender": "Male",
+        "role": "Package lead",
+        "tone": "Friendly, Positive",
+    },
+    {
+        "name": "en-US-AriaNeural",
+        "lang": "en",
+        "gender": "Female",
+        "role": "Intel / briefing",
+        "tone": "Positive, Confident",
+    },
+    {
+        "name": "en-GB-SoniaNeural",
+        "lang": "en",
+        "gender": "Female",
+        "role": "British ops",
+        "tone": "Friendly, Positive",
+    },
 ]
 
 ROLE_PRESETS = [
-    {"id": "ru_gci", "label": "RU GCI", "voice": "ru-RU-DmitryNeural", "rate": "+3%", "pitch": "-10Hz", "preset": "srs_old_soviet"},
-    {"id": "ru_raven", "label": "RU RAVEN", "voice": "ru-RU-SvetlanaNeural", "rate": "+1%", "pitch": "-3Hz", "preset": "srs_cockpit"},
-    {"id": "en_awacs", "label": "EN AWACS", "voice": "en-US-ChristopherNeural", "rate": "-2%", "pitch": "-10Hz", "preset": "srs_awacs"},
-    {"id": "en_jtac", "label": "EN JTAC", "voice": "en-US-SteffanNeural", "rate": "+1%", "pitch": "-8Hz", "preset": "srs_vhf_am"},
-    {"id": "en_flightlead", "label": "EN FLIGHT LEAD", "voice": "en-CA-LiamNeural", "rate": "+0%", "pitch": "-6Hz", "preset": "srs_uhf_am"},
+    {
+        "id": "ru_gci",
+        "label": "RU GCI",
+        "voice": "ru-RU-DmitryNeural",
+        "rate": "+3%",
+        "pitch": "-10Hz",
+        "preset": "srs_old_soviet",
+    },
+    {
+        "id": "ru_raven",
+        "label": "RU RAVEN",
+        "voice": "ru-RU-SvetlanaNeural",
+        "rate": "+1%",
+        "pitch": "-3Hz",
+        "preset": "srs_cockpit",
+    },
+    {
+        "id": "en_awacs",
+        "label": "EN AWACS",
+        "voice": "en-US-ChristopherNeural",
+        "rate": "-2%",
+        "pitch": "-10Hz",
+        "preset": "srs_awacs",
+    },
+    {
+        "id": "en_jtac",
+        "label": "EN JTAC",
+        "voice": "en-US-SteffanNeural",
+        "rate": "+1%",
+        "pitch": "-8Hz",
+        "preset": "srs_vhf_am",
+    },
+    {
+        "id": "en_flightlead",
+        "label": "EN FLIGHT LEAD",
+        "voice": "en-CA-LiamNeural",
+        "rate": "+0%",
+        "pitch": "-6Hz",
+        "preset": "srs_uhf_am",
+    },
 ]
 
 RADIO_PRESETS = {
@@ -334,7 +404,9 @@ def get_elevenlabs_subscription() -> dict:
         },
         "has_open_invoices": bool(data.get("has_open_invoices")),
         "next_invoice": {
-            "amount_due_cents": int_or_none(next_invoice.get("amount_due_cents")) if isinstance(next_invoice, dict) else None,
+            "amount_due_cents": int_or_none(next_invoice.get("amount_due_cents"))
+            if isinstance(next_invoice, dict)
+            else None,
         },
         "next_character_count_reset_unix": int_or_none(data.get("next_character_count_reset_unix")),
         "currency": data.get("currency") or "",
@@ -352,7 +424,9 @@ def list_elevenlabs_models() -> list[dict]:
         if not isinstance(model, dict) or not model.get("can_do_text_to_speech", True):
             continue
         rates = model.get("model_rates") or {}
-        character_multiplier = float_or_none(rates.get("character_cost_multiplier")) if isinstance(rates, dict) else None
+        character_multiplier = (
+            float_or_none(rates.get("character_cost_multiplier")) if isinstance(rates, dict) else None
+        )
         discount_multiplier = float_or_none(rates.get("cost_discount_multiplier")) if isinstance(rates, dict) else None
         token_cost_factor = float_or_none(model.get("token_cost_factor"))
         effective_multiplier = character_multiplier
@@ -370,7 +444,9 @@ def list_elevenlabs_models() -> list[dict]:
                 "effective_character_cost_multiplier": effective_multiplier,
                 "maximum_text_length_per_request": int_or_none(model.get("maximum_text_length_per_request")),
                 "max_characters_request_free_user": int_or_none(model.get("max_characters_request_free_user")),
-                "max_characters_request_subscribed_user": int_or_none(model.get("max_characters_request_subscribed_user")),
+                "max_characters_request_subscribed_user": int_or_none(
+                    model.get("max_characters_request_subscribed_user")
+                ),
             }
         )
     return models
@@ -528,7 +604,7 @@ def run_ffmpeg(args: list[str]) -> None:
     subprocess.run([ffmpeg(), "-hide_banner", "-loglevel", "error", "-y", *args], check=True)
 
 
-def clamp(value: int | float, low: int | float, high: int | float) -> int | float:
+def clamp(value: float, low: float, high: float) -> int | float:
     return max(low, min(high, value))
 
 
@@ -545,7 +621,7 @@ def convert_audio(
     quality = int(clamp(signal_quality, 15, 100))
     weakness = (100 - quality) / 100.0
     base_filters = [
-        f"aformat=channel_layouts=mono",
+        "aformat=channel_layouts=mono",
         f"aresample={sample_rate}",
         *preset["filters"],
     ]
@@ -561,12 +637,8 @@ def convert_audio(
     graph_parts: list[str] = []
     if noise > 0:
         graph_parts.append(f"[0:a]{filters}[base]")
-        graph_parts.append(
-            f"anoisesrc=color=white:amplitude={noise:.5f}:sample_rate={sample_rate}[noise]"
-        )
-        graph_parts.append(
-            "[base][noise]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[voice]"
-        )
+        graph_parts.append(f"anoisesrc=color=white:amplitude={noise:.5f}:sample_rate={sample_rate}[noise]")
+        graph_parts.append("[base][noise]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.95[voice]")
     else:
         graph_parts.append(f"[0:a]{filters}[voice]")
 

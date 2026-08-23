@@ -15,7 +15,6 @@ import imageio_ffmpeg
 
 import tts
 
-
 DEFAULT_VOICE = "ru-RU-DmitryNeural"
 RU_VOICES = ("ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural")
 
@@ -153,8 +152,8 @@ def write_manifests(rows: list[dict], out_dir: Path) -> None:
             "  local item = DCS_RU_VOICEKIT[id]",
             "  if not item then return end",
             "  trigger.action.outSound(item.file)",
-            "  if item.text and item.text ~= \"\" then",
-            "    local prefix = item.speaker ~= \"\" and (item.speaker .. \": \") or \"\"",
+            '  if item.text and item.text ~= "" then',
+            '    local prefix = item.speaker ~= "" and (item.speaker .. ": ") or ""',
             "    trigger.action.outText(prefix .. item.text, seconds or 10)",
             "  end",
             "end",
